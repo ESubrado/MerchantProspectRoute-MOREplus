@@ -6,7 +6,10 @@ import test from "node:test";
 // Migration paths step out of the tests directory, while the session path steps out of database.
 const schema = await readFile(new URL("../migrations/20260903000100_phase_1_workspace_crm_schema.sql", import.meta.url), "utf8");
 const rls = await readFile(new URL("../migrations/20260903000200_phase_1_workspace_crm_rls.sql", import.meta.url), "utf8");
+const ownerRoleMigration = await readFile(new URL("../migrations/20260903000400_phase_1_owner_role.sql", import.meta.url), "utf8");
+const ownerAuthorizationMigration = await readFile(new URL("../migrations/20260903000500_phase_1_owner_authorization.sql", import.meta.url), "utf8");
 const session = await readFile(new URL("../../lib/auth/session.ts", import.meta.url), "utf8");
+const authAction = await readFile(new URL("../../app/actions/auth.ts", import.meta.url), "utf8");
 
 // Keeping the table inventory explicit makes future schema scope changes intentional and reviewable.
 const phaseOneTables = [
@@ -32,6 +35,8 @@ test("Phase 1 schema keeps every CRM record within a workspace", () => {
   assert.match(schema, /foreign key \(workspace_id, canonical_email_address_id\)[\s\S]*references public\.canonical_email_addresses \(workspace_id, id\)/i);
   assert.match(schema, /unique \(workspace_id, lead_id\)/i);
   assert.match(schema, /unique \(workspace_id, lead_id, user_id\)/i);
+  // Fresh Phase 1 installations retain the owner role already present in the live membership table.
+  assert.match(schema, /create type public\.workspace_role as enum \('owner', 'admin', 'member'\)/i);
 });
 
 test("Phase 1 enables RLS and protects its authorization invariants", () => {
@@ -41,6 +46,10 @@ test("Phase 1 enables RLS and protects its authorization invariants", () => {
 
   assert.match(rls, /create or replace function public\.is_active_workspace_member/i);
   assert.match(rls, /create or replace function public\.is_workspace_admin/i);
+  assert.match(rls, /membership\.role in \('owner', 'admin'\)/i);
+  // The forward migrations keep existing database deployments aligned with fresh-schema owner semantics.
+  assert.match(ownerRoleMigration, /alter type public\.workspace_role add value 'owner'/i);
+  assert.match(ownerAuthorizationMigration, /membership\.role in \('owner', 'admin'\)/i);
   assert.match(rls, /create trigger audit_events_are_immutable/i);
   assert.doesNotMatch(rls, /audit_events_(insert|update|delete)/i);
 });
@@ -48,6 +57,14 @@ test("Phase 1 enables RLS and protects its authorization invariants", () => {
 test("workspace viewer reads the authorized membership instead of Auth role metadata", () => {
   assert.match(session, /\.from\("workspace_members"\)/);
   assert.match(session, /\.eq\("user_id", user\.id\)/);
+  // The viewer deterministically chooses one RLS-authorized membership until a workspace picker exists.
+  assert.match(session, /\.order\("created_at", \{ ascending: true \}\)[\s\S]*\.limit\(1\)/);
   assert.doesNotMatch(session, /user\.user_metadata\.role/);
   assert.doesNotMatch(session, /SurnMore workspace/);
+});
+
+test("login confirms workspace authorization before redirecting to protected routes", () => {
+  // This prevents a successful password sign-in from turning into an unexplained redirect back to login.
+  assert.match(authAction, /getAuthorizedWorkspaceAccess/);
+  assert.match(authAction, /if \(!workspaceAccess\)[\s\S]*does not have an active workspace membership/);
 });

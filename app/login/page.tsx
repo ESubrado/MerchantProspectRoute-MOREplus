@@ -6,8 +6,14 @@ import { getWorkspaceViewer } from "@/lib/auth/session";
 
 export const metadata = { title: "Sign in" };
 
-export default async function LoginPage() {
-  const viewer = await getWorkspaceViewer();
+type LoginPageProps = {
+  searchParams: Promise<{ reason?: string | string[] }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const [viewer, parameters] = await Promise.all([getWorkspaceViewer(), searchParams]);
+  // This untrusted URL value controls only explanatory copy; authorization always comes from getWorkspaceViewer.
+  const needsWorkspaceAccess = parameters.reason === "workspace-access";
 
   if (viewer) {
     redirect("/");
@@ -61,6 +67,12 @@ export default async function LoginPage() {
             <p className="text-xs font-bold tracking-[0.14em] text-[var(--teal)] uppercase">Welcome back</p>
             <h2 className="mt-3 text-[2rem] font-semibold tracking-tight text-[var(--ink)]">Sign in to your workspace</h2>
             <p className="mt-3 text-sm leading-6 text-[var(--ink-muted)]">Use your team email and password to continue to SurnMore.</p>
+
+            {needsWorkspaceAccess ? (
+              <p className="mt-5 rounded-lg border border-[rgb(184_134_27/0.3)] bg-[#fff8e7] px-3 py-2.5 text-sm leading-5 text-[#7a5700]" role="status">
+                Your account is signed in, but it is not assigned to an active workspace. Ask a workspace administrator to grant access, then sign in again.
+              </p>
+            ) : null}
 
             <div className="mt-8 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-[0_1px_2px_rgb(19_33_45/0.05)] sm:p-6">
               <LoginForm />

@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node database/tests/phase_1_foundation.test.mjs",
+    "test": "node database/tests/run.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
   },

@@ -5,8 +5,8 @@ begin;
 -- Supabase exposes pgcrypto in the extensions schema; UUID defaults stay owned by Postgres.
 create extension if not exists pgcrypto with schema extensions;
 
--- Membership roles are deliberately limited to the two roles used by Phase 1.
-create type public.workspace_role as enum ('admin', 'member');
+-- Membership roles distinguish owners from administrators while preserving a read-only member role.
+create type public.workspace_role as enum ('owner', 'admin', 'member');
 
 -- A workspace is the tenant boundary for every mutable CRM record below.
 create table public.workspaces (

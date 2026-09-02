@@ -8,7 +8,8 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
   const viewer = await getWorkspaceViewer();
 
   if (!viewer) {
-    redirect("/login");
+    // A verified session without a usable membership needs setup guidance, not an unexplained login loop.
+    redirect("/login?reason=workspace-access");
   }
 
   return <AppShell viewer={viewer}>{children}</AppShell>;

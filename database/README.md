@@ -6,12 +6,21 @@ This folder contains the standalone application's project-owned Supabase/Postgre
 
 The versioned migrations in [`migrations`](./migrations) establish the tenant and CRM boundary:
 
-- `20260903000100_phase_1_workspace_crm_schema.sql` defines workspaces, active/revocable admin or member memberships, companies, leads, tenant-local canonical emails, lead email/phone/social methods, current assignments, followers, and immutable audit events.
+- `20260903000100_phase_1_workspace_crm_schema.sql` defines workspaces, active/revocable owner, admin, or member memberships, companies, leads, tenant-local canonical emails, lead email/phone/social methods, current assignments, followers, and immutable audit events.
 - `20260903000200_phase_1_workspace_crm_rls.sql` adds timestamps, cross-tenant integrity triggers, least-privilege grants, and Row Level Security.
+- `20260903000300_phase_2_contacts_commands.sql` adds tenant-checked Contacts search, create, and update database commands with audit events.
+- `20260903000400_phase_1_owner_role.sql` adds the owner enum value when the project uses the owned `workspace_role` type.
+- `20260903000500_phase_1_owner_authorization.sql` authorizes active owners and admins as workspace managers for RLS and database commands.
 
-Every CRM table has a `workspace_id`; composite foreign keys prevent a child record from referring to a parent in another workspace. Admins may change shared CRM data, while members can read their active workspace and follow/unfollow themselves. Audit events are readable in the workspace but are append-only and may be written only by trusted server or worker code that bypasses browser RLS.
+Every CRM table has a `workspace_id`; composite foreign keys prevent a child record from referring to a parent in another workspace. Owners and admins may change shared CRM data, while members can read their active workspace and follow/unfollow themselves. Audit events are readable in the workspace but are append-only and may be written only by trusted server or worker code that bypasses browser RLS.
 
 Phase 1 deliberately excludes CSV imports, object-storage imports, mailboxes, sequences, email sending, and provider integrations.
+
+## Phase 2 Contacts
+
+The Contacts screen uses `crm_search_contacts` for server-side search, filters, and pagination. Owner-or-admin `crm_create_contact` and `crm_update_contact` commands atomically write the lead, optional primary email relationship, and audit event. The application rechecks the active workspace membership in its server data layer; each database command independently verifies it again before reading or writing.
+
+Apply `20260903000300_phase_2_contacts_commands.sql` and the later owner-role migrations after the Phase 1 migrations and before deploying the Contacts code. There are no new application environment variables or Supabase browser credentials. A missing migration produces an actionable Contacts error state rather than falling back to dummy data.
 
 ## Prerequisites and environment
 
@@ -89,7 +98,7 @@ commit;
 '@
 ```
 
-The user can then use the existing email/password login UI. The app resolves its workspace name and role from the authorized `workspace_members` row, not Auth metadata. Phase 1 deliberately fails closed if a person has zero or more than one active membership because a workspace-picker UI has not been implemented; assign exactly one active membership until that later feature exists.
+The user can then use the existing email/password login UI. The app resolves its workspace name and role from the authorized `workspace_members` row, not Auth metadata. Phase 1 fails closed when a person has no active membership. Until a workspace-picker UI exists, the app deterministically chooses that person's oldest active membership when more than one is present.
 
 To add or revoke people after bootstrap, use a reviewed server-only administrative workflow or a privileged transaction that writes `workspace_members` and an associated `audit_events` row. Never use the Supabase service-role key in client code, and never encode administrator IDs or roles in Auth user metadata.
 

@@ -30,7 +30,7 @@ as $$
   );
 $$;
 
--- Admin rights come only from an active membership, never from mutable auth metadata.
+-- Manager rights come only from an active owner or admin membership, never from mutable auth metadata.
 create or replace function public.is_workspace_admin(target_workspace_id uuid)
 returns boolean
 language sql
@@ -43,12 +43,12 @@ as $$
     from public.workspace_members as membership
     where membership.workspace_id = target_workspace_id
       and membership.user_id = (select auth.uid())
-      and membership.role = 'admin'
+      and membership.role in ('owner', 'admin')
       and membership.revoked_at is null
   );
 $$;
 
--- Serialize admin demotions and revocations so a workspace never loses its last active admin.
+-- Serialize manager demotions and revocations so a workspace never loses its last active owner or admin.
 create or replace function public.prevent_last_active_workspace_admin()
 returns trigger
 language plpgsql
@@ -58,7 +58,7 @@ as $$
 declare
   removing_active_admin boolean := false;
 begin
-  if old.role = 'admin' and old.revoked_at is null then
+  if old.role in ('owner', 'admin') and old.revoked_at is null then
     -- NEW is unavailable during DELETE triggers, so determine the transition in separate branches.
     if tg_op = 'DELETE' then
       removing_active_admin := true;
@@ -78,10 +78,10 @@ begin
       from public.workspace_members as membership
       where membership.workspace_id = old.workspace_id
         and membership.id <> old.id
-        and membership.role = 'admin'
+      and membership.role in ('owner', 'admin')
         and membership.revoked_at is null
     ) then
-      raise exception 'A workspace must retain at least one active admin.';
+      raise exception 'A workspace must retain at least one active owner or admin.';
     end if;
   end if;
 
@@ -272,7 +272,7 @@ create policy audit_events_select_active_members on public.audit_events
 for select to authenticated
 using (public.is_active_workspace_member(workspace_id));
 
--- Only admins can change tenant configuration, membership, and CRM records.
+-- Only workspace owners and administrators can change tenant configuration, membership, and CRM records.
 create policy workspaces_update_admins on public.workspaces
 for update to authenticated
 using (public.is_workspace_admin(id))
@@ -362,7 +362,7 @@ create policy lead_assignments_delete_admins on public.lead_assignments
 for delete to authenticated
 using (public.is_workspace_admin(workspace_id));
 
--- Members may follow or unfollow themselves; admins may manage any follower relationship.
+-- Members may follow or unfollow themselves; workspace owners and administrators may manage any follower relationship.
 create policy lead_followers_insert_members_or_admins on public.lead_followers
 for insert to authenticated
 with check (
