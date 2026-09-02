@@ -2,8 +2,6 @@ export type WorkspaceViewer = {
   avatarUrl: string | null;
   displayName: string;
   email: string;
-  workspaceName: string;
-  role: "admin" | "member";
 };
 
 import { getSupabaseConfiguration } from "@/lib/supabase/config";
@@ -24,7 +22,7 @@ function metadataHttpUrl(value: unknown) {
   }
 }
 
-/** Resolves the signed-in Supabase user for the workspace shell. */
+/** Resolves the verified Supabase user for authenticated workspace routes. */
 export async function getWorkspaceViewer(): Promise<WorkspaceViewer | null> {
   if (!getSupabaseConfiguration()) {
     return null;
@@ -46,13 +44,10 @@ export async function getWorkspaceViewer(): Promise<WorkspaceViewer | null> {
   ].filter(Boolean).join(" ");
   const displayName = profileName || fallbackName || user.email?.split("@")[0] || "Workspace user";
   const avatarUrl = metadataHttpUrl(user.user_metadata.avatar_url) ?? metadataHttpUrl(user.user_metadata.picture);
-  const role = user.user_metadata.role === "admin" ? "admin" : "member";
 
   return {
     avatarUrl,
     displayName,
     email: user.email ?? "Signed-in user",
-    role,
-    workspaceName: "SurnMore workspace",
   };
 }
