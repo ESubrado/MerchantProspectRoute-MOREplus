@@ -28,6 +28,10 @@ export function UsersIcon(props: IconProps) {
   return <Icon {...props}><path d="M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1" /><circle cx="9.5" cy="7" r="3" /><path d="M21 20v-1.2a4 4 0 0 0-3-3.85M16.5 4.2a3 3 0 0 1 0 5.6" /></Icon>;
 }
 
+export function UserIcon(props: IconProps) {
+  return <Icon {...props}><circle cx="12" cy="8" r="3.5" /><path d="M5 21a7 7 0 0 1 14 0" /></Icon>;
+}
+
 export function TargetIcon(props: IconProps) {
   return <Icon {...props}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><path d="M12 3.5V1.8M20.5 12h1.7M12 20.5v1.7M3.5 12H1.8" /></Icon>;
 }
@@ -40,6 +44,10 @@ export function SettingsIcon(props: IconProps) {
   return <Icon {...props}><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1 1.7-2.2 2.2-1.7-.1-1.1 1.2-2.9-1.2V17l-1.6-.7-1.4 1-2.4-2 .7-1.6-.7-1.5-1.7-.2V9.1l1.7-.2.7-1.5-.7-1.6 2.4-2 1.4 1 1.6-.7V2.4l2.9-1.2 1.1 1.2 1.7-.1 2.2 2.2-.1 1.7 1.2 1.1-1.2 2.9h-1.7l-.7 1.6.7 1.4Z" /></Icon>;
 }
 
+export function LogOutIcon(props: IconProps) {
+  return <Icon {...props}><path d="M14 4H5.5A1.5 1.5 0 0 0 4 5.5v13A1.5 1.5 0 0 0 5.5 20H14" /><path d="m11 12 8-5v10l-8-5ZM19 12h-8" /></Icon>;
+}
+
 export function BuildingIcon(props: IconProps) {
   return <Icon {...props}><path d="M4 21V5.5a1.5 1.5 0 0 1 1.5-1.5h9A1.5 1.5 0 0 1 16 5.5V21" /><path d="M16 9h2.5A1.5 1.5 0 0 1 20 10.5V21M8 8h4M8 12h4M8 16h4M2 21h20" /></Icon>;
 }
@@ -50,6 +58,10 @@ export function LayersIcon(props: IconProps) {
 
 export function ChevronDownIcon(props: IconProps) {
   return <Icon {...props}><path d="m6 9 6 6 6-6" /></Icon>;
+}
+
+export function PanelLeftIcon(props: IconProps) {
+  return <Icon {...props}><rect height="17" rx="2" width="19" x="2.5" y="3.5" /><path d="M9 3.5v17M13 9l3 3-3 3" /></Icon>;
 }
 
 export function SearchIcon(props: IconProps) {

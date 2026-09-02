@@ -1,7 +1,15 @@
+import { redirect } from "next/navigation";
+
 import { AppShell } from "@/components/app-shell";
 import { HomeScreen } from "@/components/screens/home-screen";
-import { shellPreviewViewer } from "@/lib/auth/session";
+import { getWorkspaceViewer } from "@/lib/auth/session";
 
-export default function HomePage() {
-  return <AppShell viewer={shellPreviewViewer}><HomeScreen /></AppShell>;
+export default async function HomePage() {
+  const viewer = await getWorkspaceViewer();
+
+  if (!viewer) {
+    redirect("/login");
+  }
+
+  return <AppShell viewer={viewer}><HomeScreen /></AppShell>;
 }

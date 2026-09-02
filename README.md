@@ -4,7 +4,7 @@ Standalone CRM and cold-email outreach application foundation. It is intentional
 
 ## Run locally
 
-1. Copy `.env.example` to `.env.local` and provide values only for integrations you choose to enable.
+1. Copy `.env.example` to `.env.local`. To enable sign-in, provide this project's `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from Supabase Settings > API.
 2. Install dependencies with `npm install`.
 3. Start the development server:
 
@@ -31,7 +31,7 @@ database/   Owned schema, migrations, and database documentation
 docs/       Source inventory, target architecture, gap register, manifest
 ```
 
-The current application routes are visual, interaction-ready prototypes for Contacts, Companies, Inbox, Mailboxes, Sequences, and Administration. The workspace shell models authenticated navigation but does not connect an authentication provider or backend yet. See `docs/design-system.md`, `docs/visual-qa-checklist.md`, and `docs/backend-gap-register.md` before implementing durable product behavior.
+The current application routes are visual, interaction-ready prototypes for Contacts, Companies, Inbox, Mailboxes, Sequences, and Administration. Workspace access uses Supabase email/password authentication; configure a project-owned Supabase instance before signing in. See `docs/design-system.md`, `docs/visual-qa-checklist.md`, and `docs/backend-gap-register.md` before implementing durable product behavior.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 

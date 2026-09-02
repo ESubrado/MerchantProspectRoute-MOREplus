@@ -1,8 +1,15 @@
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
-import { shellPreviewViewer } from "@/lib/auth/session";
+import { getWorkspaceViewer } from "@/lib/auth/session";
 
-export default function AuthenticatedLayout({ children }: { children: ReactNode }) {
-  return <AppShell viewer={shellPreviewViewer}>{children}</AppShell>;
+export default async function AuthenticatedLayout({ children }: { children: ReactNode }) {
+  const viewer = await getWorkspaceViewer();
+
+  if (!viewer) {
+    redirect("/login");
+  }
+
+  return <AppShell viewer={viewer}>{children}</AppShell>;
 }
