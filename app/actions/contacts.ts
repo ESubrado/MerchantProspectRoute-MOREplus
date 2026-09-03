@@ -12,24 +12,43 @@ export type ContactActionState = {
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Validates the only editable Phase 2 contact fields before the data layer calls an atomic database command. */
+/** Validates the editable contact fields before the data layer calls an atomic database command. */
 function contactInput(formData: FormData): { input: ContactWriteInput } | { message: string } {
-  const fullName = String(formData.get("fullName") ?? "").trim();
+  const firstName = String(formData.get("firstName") ?? "").trim();
+  const lastName = String(formData.get("lastName") ?? "").trim();
   const rawCompanyId = String(formData.get("companyId") ?? "").trim();
   const rawPrimaryEmail = String(formData.get("primaryEmail") ?? "").trim().toLowerCase();
+  const rawReplyTemperature = String(formData.get("replyTemperature") ?? "").trim();
+  const stage = String(formData.get("stage") ?? "").trim();
+  const status = String(formData.get("status") ?? "").trim();
+  const replyTemperature = rawReplyTemperature === "" ? null : Number(rawReplyTemperature);
 
-  if (!fullName) return { message: "Enter a contact name." };
-  if (fullName.length > 200) return { message: "Contact names must be 200 characters or fewer." };
+  if (!firstName && !lastName) return { message: "Enter a first or last name." };
+  if (firstName.length > 100 || lastName.length > 100 || `${firstName} ${lastName}`.trim().length > 200) {
+    return { message: "First and last names must be 100 characters or fewer each." };
+  }
   if (rawCompanyId && !uuidPattern.test(rawCompanyId)) return { message: "Choose a company from this workspace." };
   if (rawPrimaryEmail && (!emailPattern.test(rawPrimaryEmail) || rawPrimaryEmail.length > 320)) {
     return { message: "Enter a valid primary email address or leave it blank." };
   }
+  if (rawReplyTemperature && (replyTemperature === null || !Number.isInteger(replyTemperature) || replyTemperature < 0 || replyTemperature > 4)) {
+    return { message: "Choose a valid reply classification." };
+  }
+  if (!stage || stage.length > 80) return { message: "Contact stage must contain between 1 and 80 characters." };
+  if (!status || status.length > 80) return { message: "Contact status must contain between 1 and 80 characters." };
 
   return {
     input: {
+      callDnc: formData.get("callDnc") === "on",
       companyId: rawCompanyId || null,
-      fullName,
+      emailDnc: formData.get("emailDnc") === "on",
+      firstName: firstName || null,
+      lastName: lastName || null,
       primaryEmail: rawPrimaryEmail || null,
+      replyTemperature,
+      smsDnc: formData.get("smsDnc") === "on",
+      stage,
+      status,
     },
   };
 }

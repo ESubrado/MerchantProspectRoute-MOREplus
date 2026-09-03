@@ -11,6 +11,8 @@ The versioned migrations in [`migrations`](./migrations) establish the tenant an
 - `20260903000300_phase_2_contacts_commands.sql` adds tenant-checked Contacts search, create, and update database commands with audit events.
 - `20260903000400_phase_1_owner_role.sql` adds the owner enum value when the project uses the owned `workspace_role` type.
 - `20260903000500_phase_1_owner_authorization.sql` authorizes active owners and admins as workspace managers for RLS and database commands.
+- `20260903000600_phase_2_lead_lifecycle_fields.sql` adds lead creator attribution, lifecycle state, reply classification, and email/SMS/call do-not-contact preferences, then updates the Contacts commands.
+- `20260903000700_phase_2_contact_name_parts.sql` changes Contacts writes to use first and last names while deriving the existing full-name directory label.
 
 Every CRM table has a `workspace_id`; composite foreign keys prevent a child record from referring to a parent in another workspace. Owners and admins may change shared CRM data, while members can read their active workspace and follow/unfollow themselves. Audit events are readable in the workspace but are append-only and may be written only by trusted server or worker code that bypasses browser RLS.
 
@@ -20,7 +22,7 @@ Phase 1 deliberately excludes CSV imports, object-storage imports, mailboxes, se
 
 The Contacts screen uses `crm_search_contacts` for server-side search, filters, and pagination. Owner-or-admin `crm_create_contact` and `crm_update_contact` commands atomically write the lead, optional primary email relationship, and audit event. The application rechecks the active workspace membership in its server data layer; each database command independently verifies it again before reading or writing.
 
-Apply `20260903000300_phase_2_contacts_commands.sql` and the later owner-role migrations after the Phase 1 migrations and before deploying the Contacts code. There are no new application environment variables or Supabase browser credentials. A missing migration produces an actionable Contacts error state rather than falling back to dummy data.
+Apply `20260903000300_phase_2_contacts_commands.sql` and all later migrations, including `20260903000600_phase_2_lead_lifecycle_fields.sql` and `20260903000700_phase_2_contact_name_parts.sql`, after the Phase 1 migrations and before deploying the Contacts code. There are no new application environment variables or Supabase browser credentials. A missing migration produces an actionable Contacts error state rather than falling back to dummy data.
 
 ## Prerequisites and environment
 

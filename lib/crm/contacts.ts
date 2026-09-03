@@ -10,13 +10,22 @@ export const contactFilters = ["all", "with_email", "without_email", "unassigned
 export type ContactFilter = typeof contactFilters[number];
 
 export type ContactListItem = {
+  callDnc: boolean;
   companyId: string | null;
   companyName: string | null;
   createdAt: string;
+  createdBy: string | null;
+  emailDnc: boolean;
+  firstName: string | null;
   fullName: string;
   id: string;
   isAssigned: boolean;
   primaryEmail: string | null;
+  replyTemperature: number | null;
+  smsDnc: boolean;
+  stage: string;
+  status: string;
+  lastName: string | null;
   updatedAt: string;
 };
 
@@ -26,9 +35,16 @@ export type CompanyOption = {
 };
 
 export type ContactWriteInput = {
+  callDnc: boolean;
   companyId: string | null;
-  fullName: string;
+  emailDnc: boolean;
+  firstName: string | null;
+  lastName: string | null;
   primaryEmail: string | null;
+  replyTemperature: number | null;
+  smsDnc: boolean;
+  stage: string;
+  status: string;
 };
 
 export type ContactsPageResult =
@@ -63,13 +79,22 @@ function contactFromRow(value: unknown): ContactListItem | null {
   }
 
   return {
+    callDnc: row.call_dnc === true,
     companyId: typeof row.company_id === "string" ? row.company_id : null,
     companyName: typeof row.company_name === "string" ? row.company_name : null,
     createdAt,
+    createdBy: typeof row.created_by === "string" ? row.created_by : null,
+    emailDnc: row.email_dnc === true,
+    firstName: typeof row.first_name === "string" ? row.first_name : null,
     fullName,
     id,
     isAssigned: row.is_assigned === true,
     primaryEmail: typeof row.primary_email === "string" ? row.primary_email : null,
+    replyTemperature: typeof row.reply_temperature === "number" ? row.reply_temperature : null,
+    smsDnc: row.sms_dnc === true,
+    stage: typeof row.stage === "string" ? row.stage : "new",
+    status: typeof row.status === "string" ? row.status : "active",
+    lastName: typeof row.last_name === "string" ? row.last_name : null,
     updatedAt,
   };
 }
@@ -144,9 +169,16 @@ export async function createWorkspaceContact(input: ContactWriteInput): Promise<
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("crm_create_contact", {
+    p_call_dnc: input.callDnc,
     p_company_id: input.companyId,
-    p_full_name: input.fullName,
+    p_email_dnc: input.emailDnc,
+    p_first_name: input.firstName,
+    p_last_name: input.lastName,
     p_primary_email: input.primaryEmail,
+    p_reply_temperature: input.replyTemperature,
+    p_sms_dnc: input.smsDnc,
+    p_stage: input.stage,
+    p_status: input.status,
     p_workspace_id: workspaceAccess.workspaceId,
   });
 
@@ -163,10 +195,17 @@ export async function updateWorkspaceContact(contactId: string, input: ContactWr
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("crm_update_contact", {
+    p_call_dnc: input.callDnc,
     p_company_id: input.companyId,
     p_contact_id: contactId,
-    p_full_name: input.fullName,
+    p_email_dnc: input.emailDnc,
+    p_first_name: input.firstName,
+    p_last_name: input.lastName,
     p_primary_email: input.primaryEmail,
+    p_reply_temperature: input.replyTemperature,
+    p_sms_dnc: input.smsDnc,
+    p_stage: input.stage,
+    p_status: input.status,
     p_workspace_id: workspaceAccess.workspaceId,
   });
 
@@ -175,7 +214,7 @@ export async function updateWorkspaceContact(contactId: string, input: ContactWr
 
 /** Maps expected database command failures to errors that help an operator correct the form. */
 function saveErrorMessage(code: string | undefined) {
-  if (code === "22023") return "Check the contact name and primary email, then save again.";
+  if (code === "22023") return "Check the contact details and lifecycle fields, then save again.";
   if (code === "23503") return "Choose a company that belongs to this workspace.";
   if (code === "P0002") return "This contact is no longer available. Refresh the directory and try again.";
   if (code === "42501") return "Your workspace permissions changed. Sign in again and try once more.";

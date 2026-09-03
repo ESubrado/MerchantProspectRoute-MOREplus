@@ -44,6 +44,14 @@ const filters = [
   { value: "without_email", label: "Needs email" },
   { value: "unassigned", label: "Unassigned" },
 ] as const;
+const replyTemperatureOptions = [
+  { label: "Unclassified", value: "" },
+  { label: "Neutral", value: "0" },
+  { label: "Interested", value: "1" },
+  { label: "Auto-reply", value: "2" },
+  { label: "Do not contact", value: "3" },
+  { label: "Reschedule", value: "4" },
+] as const;
 
 /** Formats an actual database timestamp for compact directory scanning. */
 function updatedLabel(value: string) {
@@ -52,6 +60,24 @@ function updatedLabel(value: string) {
   return Number.isNaN(date.getTime())
     ? "Updated recently"
     : new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(date);
+}
+
+function replyTemperatureLabel(value: number | null) {
+  return replyTemperatureOptions.find((option) => option.value === String(value ?? ""))?.label ?? "Unclassified";
+}
+
+function dncSummary(contact: ContactListItem) {
+  const methods = [contact.emailDnc ? "email" : null, contact.smsDnc ? "SMS" : null, contact.callDnc ? "calls" : null].filter((method): method is string => method !== null);
+  return methods.length > 0 ? methods.join(", ") : "None";
+}
+
+/** Preserves an editable split for legacy contacts that predate first- and last-name writes. */
+function contactNameParts(contact?: ContactListItem) {
+  if (!contact) return { firstName: "", lastName: "" };
+  if (contact.firstName || contact.lastName) return { firstName: contact.firstName ?? "", lastName: contact.lastName ?? "" };
+
+  const [firstName = "", ...remainingNames] = contact.fullName.trim().split(/\s+/);
+  return { firstName, lastName: remainingNames.join(" ") };
 }
 
 /** Preserves the current search and filter while giving the directory durable, linkable pagination. */
@@ -79,6 +105,7 @@ function ContactForm({
   onComplete: () => void;
 }) {
   const [state, formAction, pending] = useActionState(action, actionInitialState);
+  const nameParts = contactNameParts(contact);
   // Preserve an older company selection even when the picker is intentionally capped for initial page load.
   const selectableCompanies = contact?.companyId && contact.companyName && !companies.some((company) => company.id === contact.companyId)
     ? [{ id: contact.companyId, name: contact.companyName }, ...companies]
@@ -92,9 +119,14 @@ function ContactForm({
     <form action={formAction} className="space-y-6">
       {contact ? <input name="contactId" type="hidden" value={contact.id} /> : null}
       <div className="grid gap-4">
-        <Field label="Contact name" hint="Required. This is how the contact is shown in the directory.">
-          <Input defaultValue={contact?.fullName} maxLength={200} name="fullName" required />
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="First name" hint="Enter a first name, last name, or both.">
+            <Input defaultValue={nameParts.firstName} maxLength={100} name="firstName" />
+          </Field>
+          <Field label="Last name" hint="Optional when a first name is provided.">
+            <Input defaultValue={nameParts.lastName} maxLength={100} name="lastName" />
+          </Field>
+        </div>
         <Field label="Company" hint="Choose an existing company in this workspace, or leave this contact independent.">
           <Select defaultValue={contact?.companyId ?? ""} name="companyId">
             <option value="">No company</option>
@@ -104,6 +136,25 @@ function ContactForm({
         <Field label="Primary email" hint="Optional. Saving a new value replaces this contact's current primary email.">
           <Input defaultValue={contact?.primaryEmail ?? ""} maxLength={320} name="primaryEmail" type="email" />
         </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Stage" hint="Use the lifecycle wording your workspace uses.">
+            <Input defaultValue={contact?.stage ?? "new"} maxLength={80} name="stage" required />
+          </Field>
+          <Field label="Status" hint="Use a concise current-state label.">
+            <Input defaultValue={contact?.status ?? "active"} maxLength={80} name="status" required />
+          </Field>
+        </div>
+        <Field label="Reply classification" hint="Selecting Do not contact also marks email as DNC when saved.">
+          <Select defaultValue={contact?.replyTemperature === null || contact?.replyTemperature === undefined ? "" : String(contact.replyTemperature)} name="replyTemperature">
+            {replyTemperatureOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </Select>
+        </Field>
+        <fieldset className="grid gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-subtle)] p-4">
+          <legend className="px-1 text-sm font-semibold text-[var(--ink)]">Do-not-contact preferences</legend>
+          <label className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]"><input defaultChecked={contact?.emailDnc ?? false} name="emailDnc" type="checkbox" />Email</label>
+          <label className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]"><input defaultChecked={contact?.smsDnc ?? false} name="smsDnc" type="checkbox" />SMS</label>
+          <label className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]"><input defaultChecked={contact?.callDnc ?? false} name="callDnc" type="checkbox" />Calls</label>
+        </fieldset>
       </div>
       {state.status !== "idle" ? (
         <p aria-live="polite" className={state.status === "error" ? "rounded-lg border border-[#ecc7cf] bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger)]" : "rounded-lg border border-[#cce4d6] bg-[var(--success-soft)] px-3 py-2 text-sm text-[var(--success)]"}>
@@ -139,6 +190,10 @@ function ContactDrawerContent({
       <dl className="grid gap-4 text-sm">
         <div><dt className="text-xs font-bold tracking-wide text-[var(--ink-muted)] uppercase">Company</dt><dd className="mt-1 font-medium text-[var(--ink)]">{contact.companyName ?? "No company"}</dd></div>
         <div><dt className="text-xs font-bold tracking-wide text-[var(--ink-muted)] uppercase">Primary email</dt><dd className="mt-1 font-medium text-[var(--ink)]">{contact.primaryEmail ?? "No primary email"}</dd></div>
+        <div><dt className="text-xs font-bold tracking-wide text-[var(--ink-muted)] uppercase">Stage</dt><dd className="mt-1 font-medium text-[var(--ink)]">{contact.stage}</dd></div>
+        <div><dt className="text-xs font-bold tracking-wide text-[var(--ink-muted)] uppercase">Status</dt><dd className="mt-1 font-medium text-[var(--ink)]">{contact.status}</dd></div>
+        <div><dt className="text-xs font-bold tracking-wide text-[var(--ink-muted)] uppercase">Reply classification</dt><dd className="mt-1 font-medium text-[var(--ink)]">{replyTemperatureLabel(contact.replyTemperature)}</dd></div>
+        <div><dt className="text-xs font-bold tracking-wide text-[var(--ink-muted)] uppercase">Do not contact</dt><dd className="mt-1 font-medium text-[var(--ink)]">{dncSummary(contact)}</dd></div>
         <div><dt className="text-xs font-bold tracking-wide text-[var(--ink-muted)] uppercase">Ownership</dt><dd className="mt-1"><StatusPill tone={contact.isAssigned ? "success" : "neutral"}>{contact.isAssigned ? "Assigned" : "Unassigned"}</StatusPill></dd></div>
         <div><dt className="text-xs font-bold tracking-wide text-[var(--ink-muted)] uppercase">Last updated</dt><dd className="mt-1 font-medium text-[var(--ink)]">{updatedLabel(contact.updatedAt)}</dd></div>
       </dl>
@@ -187,6 +242,7 @@ export function ContactsScreen({ canManageContacts, companies, contacts, filter,
                 <TableHead>Contact</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Primary email</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Ownership</TableHead>
                 <TableHead>Updated</TableHead>
                 <TableHead className="w-12"><span className="sr-only">Open contact</span></TableHead>
@@ -202,6 +258,7 @@ export function ContactsScreen({ canManageContacts, companies, contacts, filter,
                   </TableCell>
                   <TableCell className="font-medium text-[var(--ink)]">{contact.companyName ?? <span className="text-[var(--ink-muted)]">No company</span>}</TableCell>
                   <TableCell className="text-[var(--ink-muted)]">{contact.primaryEmail ?? "No primary email"}</TableCell>
+                  <TableCell><StatusPill tone="teal">{contact.status}</StatusPill></TableCell>
                   <TableCell><StatusPill tone={contact.isAssigned ? "success" : "neutral"}>{contact.isAssigned ? "Assigned" : "Unassigned"}</StatusPill></TableCell>
                   <TableCell className="text-[var(--ink-muted)]">{updatedLabel(contact.updatedAt)}</TableCell>
                   <TableCell><Button aria-label={`Open ${contact.fullName}`} onClick={() => setDrawer({ contact, mode: "view" })} size="icon" variant="ghost"><MoreIcon className="size-4" /></Button></TableCell>
