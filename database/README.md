@@ -14,6 +14,7 @@ The versioned migrations in [`migrations`](./migrations) establish the tenant an
 - `20260903000600_phase_2_lead_lifecycle_fields.sql` adds lead creator attribution, lifecycle state, reply classification, and email/SMS/call do-not-contact preferences, then updates the Contacts commands.
 - `20260903000700_phase_2_contact_name_parts.sql` changes Contacts writes to use first and last names while deriving the existing full-name directory label.
 - `20260903000800_phase_3_crm_domain_commands.sql` adds the tenant-safe Companies directory/detail/edit commands and complete contact-method, assignment, follower, reply-state, and email-DNC commands.
+- `20260903000900_phase_4_durable_contact_imports.sql` adds disabled-by-default, workspace-scoped durable CSV jobs, row outcomes, a private Storage bucket, worker leases, and cleanup commands.
 
 Every CRM table has a `workspace_id`; composite foreign keys prevent a child record from referring to a parent in another workspace. Owners and admins may change shared CRM data, while members can read their active workspace and follow/unfollow themselves. Audit events are readable in the workspace but are append-only and may be written only by trusted server or worker code that bypasses browser RLS.
 
@@ -28,6 +29,12 @@ Apply `20260903000300_phase_2_contacts_commands.sql` and all later migrations, i
 ## Phase 3 CRM and Companies
 
 Phase 3 makes the Companies route database-backed and completes the CRM relationship commands used in the Contacts drawer. Apply `20260903000800_phase_3_crm_domain_commands.sql` after every earlier migration before deploying the Phase 3 application code. The migration adds optional company phone/address values, an in-workspace normalized company-name uniqueness rule, and transactional commands that independently authorize every request. Email DNC is stored on `leads`; a change to it writes a dedicated immutable audit event. No additional application environment variables are required.
+
+## Phase 4 durable CSV imports
+
+Phase 4 adds a project-owned private `contact-imports` bucket, disabled-by-default workspace import setting, durable contact-import job records, bounded row errors, service-role worker claims, resumable batches, counters, and 30-day source cleanup. The Contacts button is intentionally disabled with an **Imports coming soon** explanation. That presentation is backed by the database: job creation remains denied unless a database owner enables a workspace after deploying the worker.
+
+Apply `20260903000900_phase_4_durable_contact_imports.sql` after all earlier migrations. Import jobs, Storage uploads, and service-role worker access require the additional server-only `SUPABASE_SERVICE_ROLE_KEY`; it must never be exposed as a `NEXT_PUBLIC_` value. See [the Phase 4 import runbook](../docs/contact-import-runbook.md) for mapping, dedupe, file-limit, retention, scheduler, recovery, and staged-enable requirements.
 
 ## Prerequisites and environment
 

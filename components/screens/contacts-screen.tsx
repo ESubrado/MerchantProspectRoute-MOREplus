@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { WorkspaceRole } from "@/lib/auth/roles";
 import type { CompanyOption, ContactDetail, ContactListItem, WorkspaceMemberOption } from "@/lib/crm/contacts";
+import { CONTACT_IMPORTS_COMING_SOON_MESSAGE } from "@/lib/imports/contract";
 
 type ContactAction = (previousState: ContactActionState, formData: FormData) => Promise<ContactActionState>;
 
@@ -270,7 +271,7 @@ export function ContactsScreen({ canManageContacts, companies, contacts, filter,
   return (
     <div className="space-y-6">
       <PageHeader
-        actions={canManageContacts ? <Button onClick={() => setDrawer({ mode: "create" })}><PlusIcon className="size-4" />New contact</Button> : undefined}
+        actions={canManageContacts ? <div className="flex flex-wrap items-start justify-end gap-2"><Button onClick={() => setDrawer({ mode: "create" })}><PlusIcon className="size-4" />New contact</Button><span className="grid gap-1" title={CONTACT_IMPORTS_COMING_SOON_MESSAGE}><Button aria-describedby="contact-imports-coming-soon" disabled variant="secondary">Import CSV</Button><span className="max-w-44 text-xs font-medium text-[var(--ink-muted)]" id="contact-imports-coming-soon">Imports coming soon</span></span></div> : undefined}
         description="Search and manage contacts that belong to your active workspace. Results and permissions are enforced by Supabase."
         eyebrow="CRM / Directory"
         title="Contacts"
