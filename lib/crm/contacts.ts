@@ -47,6 +47,51 @@ export type ContactWriteInput = {
   status: string;
 };
 
+export type ContactEmailMethod = {
+  doNotContact: boolean;
+  email: string;
+  id: string;
+  isPrimary: boolean;
+  label: string;
+};
+
+export type ContactPhoneMethod = {
+  id: string;
+  isPrimary: boolean;
+  label: string;
+  phoneNumber: string;
+};
+
+export type ContactSocialProfile = {
+  id: string;
+  platform: string;
+  profileUrl: string;
+};
+
+export type ContactDetail = {
+  assigneeUserId: string | null;
+  companyId: string | null;
+  companyName: string | null;
+  emailDnc: boolean;
+  emailMethods: ContactEmailMethod[];
+  firstName: string | null;
+  followerUserIds: string[];
+  fullName: string;
+  id: string;
+  isFollowing: boolean;
+  lastName: string | null;
+  phoneMethods: ContactPhoneMethod[];
+  primaryEmail: string | null;
+  replyTemperature: number | null;
+  socialProfiles: ContactSocialProfile[];
+  updatedAt: string;
+};
+
+export type WorkspaceMemberOption = {
+  role: WorkspaceRole;
+  userId: string;
+};
+
 export type ContactsPageResult =
   | {
     canManageContacts: boolean;
@@ -95,6 +140,57 @@ function contactFromRow(value: unknown): ContactListItem | null {
     stage: typeof row.stage === "string" ? row.stage : "new",
     status: typeof row.status === "string" ? row.status : "active",
     lastName: typeof row.last_name === "string" ? row.last_name : null,
+    updatedAt,
+  };
+}
+
+function objectList(value: unknown) {
+  return Array.isArray(value) ? value.map(record).filter((item): item is RecordValue => item !== null) : [];
+}
+
+function contactDetailFromRow(value: unknown): ContactDetail | null {
+  const row = record(value);
+  const id = typeof row?.id === "string" ? row.id : null;
+  const fullName = typeof row?.full_name === "string" ? row.full_name : null;
+  const updatedAt = typeof row?.updated_at === "string" ? row.updated_at : null;
+  if (!row || !id || !fullName || !updatedAt) return null;
+
+  const emailMethods = objectList(row.email_methods).flatMap((method) => {
+    const methodId = typeof method.id === "string" ? method.id : null;
+    const email = typeof method.email === "string" ? method.email : null;
+    const label = typeof method.label === "string" ? method.label : null;
+    return methodId && email && label ? [{ doNotContact: method.do_not_contact === true, email, id: methodId, isPrimary: method.is_primary === true, label }] : [];
+  });
+  const phoneMethods = objectList(row.phone_methods).flatMap((method) => {
+    const methodId = typeof method.id === "string" ? method.id : null;
+    const phoneNumber = typeof method.phone_number === "string" ? method.phone_number : null;
+    const label = typeof method.label === "string" ? method.label : null;
+    return methodId && phoneNumber && label ? [{ id: methodId, isPrimary: method.is_primary === true, label, phoneNumber }] : [];
+  });
+  const socialProfiles = objectList(row.social_profiles).flatMap((profile) => {
+    const profileId = typeof profile.id === "string" ? profile.id : null;
+    const platform = typeof profile.platform === "string" ? profile.platform : null;
+    const profileUrl = typeof profile.profile_url === "string" ? profile.profile_url : null;
+    return profileId && platform && profileUrl ? [{ id: profileId, platform, profileUrl }] : [];
+  });
+  const followerUserIds = Array.isArray(row.follower_user_ids) ? row.follower_user_ids.filter((userId): userId is string => typeof userId === "string") : [];
+
+  return {
+    assigneeUserId: typeof row.assignee_user_id === "string" ? row.assignee_user_id : null,
+    companyId: typeof row.company_id === "string" ? row.company_id : null,
+    companyName: typeof row.company_name === "string" ? row.company_name : null,
+    emailDnc: row.email_dnc === true,
+    emailMethods,
+    firstName: typeof row.first_name === "string" ? row.first_name : null,
+    followerUserIds,
+    fullName,
+    id,
+    isFollowing: row.is_following === true,
+    lastName: typeof row.last_name === "string" ? row.last_name : null,
+    phoneMethods,
+    primaryEmail: typeof row.primary_email === "string" ? row.primary_email : null,
+    replyTemperature: typeof row.reply_temperature === "number" ? row.reply_temperature : null,
+    socialProfiles,
     updatedAt,
   };
 }
@@ -194,22 +290,101 @@ export async function updateWorkspaceContact(contactId: string, input: ContactWr
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("crm_update_contact", {
-    p_call_dnc: input.callDnc,
+  const { error } = await supabase.rpc("crm_update_contact_profile", {
     p_company_id: input.companyId,
     p_contact_id: contactId,
-    p_email_dnc: input.emailDnc,
     p_first_name: input.firstName,
     p_last_name: input.lastName,
     p_primary_email: input.primaryEmail,
-    p_reply_temperature: input.replyTemperature,
-    p_sms_dnc: input.smsDnc,
     p_stage: input.stage,
     p_status: input.status,
     p_workspace_id: workspaceAccess.workspaceId,
   });
 
   return error ? { message: saveErrorMessage(error.code), type: "error" } : { type: "success" };
+}
+
+/** Reads a complete contact record, including tenant-local methods and ownership relationships. */
+export async function getContactDetail(contactId: string): Promise<{ detail?: ContactDetail; message?: string; type: "success" | "error" }> {
+  const workspaceAccess = await getAuthorizedWorkspaceAccess();
+  if (!workspaceAccess || !getSupabaseConfiguration()) return { message: "Your workspace access could not be verified. Sign in again and try once more.", type: "error" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("crm_get_contact_detail", { p_contact_id: contactId, p_workspace_id: workspaceAccess.workspaceId });
+  const detail = contactDetailFromRow(data?.[0]);
+  if (error || !detail) return { message: "This contact is no longer available. Refresh the directory and try again.", type: "error" };
+  return { detail, type: "success" };
+}
+
+/** Lists active membership identities only after the database independently checks the caller's workspace access. */
+export async function getWorkspaceMembers(): Promise<{ members?: WorkspaceMemberOption[]; message?: string; type: "success" | "error" }> {
+  const workspaceAccess = await getAuthorizedWorkspaceAccess();
+  if (!workspaceAccess || !getSupabaseConfiguration()) return { message: "Your workspace access could not be verified. Sign in again and try once more.", type: "error" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("crm_list_workspace_members", { p_workspace_id: workspaceAccess.workspaceId });
+  if (error) return { message: "Workspace members could not be loaded right now.", type: "error" };
+
+  const members = (data ?? []).flatMap((value: unknown) => {
+    const row = record(value);
+    const userId = typeof row?.user_id === "string" ? row.user_id : null;
+    const role = row?.role;
+    return userId && (role === "owner" || role === "admin" || role === "member") ? [{ role, userId }] : [];
+  });
+  return { members, type: "success" };
+}
+
+type ContactCommandResult = { message?: string; type: "success" | "error" };
+
+async function managerContactCommand(rpc: "crm_add_contact_email" | "crm_remove_contact_email" | "crm_add_contact_phone" | "crm_remove_contact_phone" | "crm_add_contact_social_profile" | "crm_remove_contact_social_profile" | "crm_set_contact_assignment" | "crm_set_contact_reply_state", args: Record<string, unknown>): Promise<ContactCommandResult> {
+  const workspaceAccess = await getAuthorizedWorkspaceAccess();
+  if (!workspaceAccess || !isWorkspaceManagerRole(workspaceAccess.role) || !getSupabaseConfiguration()) return { message: "Only workspace owners and admins can change this contact.", type: "error" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc(rpc, { ...args, p_workspace_id: workspaceAccess.workspaceId });
+  return error ? { message: contactCommandError(error.code), type: "error" } : { type: "success" };
+}
+
+export function addContactEmail(contactId: string, input: { email: string; isPrimary: boolean; label: string }) {
+  return managerContactCommand("crm_add_contact_email", { p_contact_id: contactId, p_email: input.email, p_is_primary: input.isPrimary, p_label: input.label });
+}
+
+export function removeContactEmail(contactId: string, methodId: string) {
+  return managerContactCommand("crm_remove_contact_email", { p_contact_id: contactId, p_method_id: methodId });
+}
+
+export function addContactPhone(contactId: string, input: { isPrimary: boolean; label: string; phoneNumber: string }) {
+  return managerContactCommand("crm_add_contact_phone", { p_contact_id: contactId, p_is_primary: input.isPrimary, p_label: input.label, p_phone_number: input.phoneNumber });
+}
+
+export function removeContactPhone(contactId: string, methodId: string) {
+  return managerContactCommand("crm_remove_contact_phone", { p_contact_id: contactId, p_method_id: methodId });
+}
+
+export function addContactSocialProfile(contactId: string, input: { platform: string; profileUrl: string }) {
+  return managerContactCommand("crm_add_contact_social_profile", { p_contact_id: contactId, p_platform: input.platform, p_profile_url: input.profileUrl });
+}
+
+export function removeContactSocialProfile(contactId: string, methodId: string) {
+  return managerContactCommand("crm_remove_contact_social_profile", { p_contact_id: contactId, p_method_id: methodId });
+}
+
+export function setContactAssignment(contactId: string, assigneeUserId: string | null) {
+  return managerContactCommand("crm_set_contact_assignment", { p_assigned_to_user_id: assigneeUserId, p_contact_id: contactId });
+}
+
+export function setContactReplyState(contactId: string, input: { emailDnc: boolean; replyTemperature: number | null }) {
+  return managerContactCommand("crm_set_contact_reply_state", { p_contact_id: contactId, p_email_dnc: input.emailDnc, p_reply_temperature: input.replyTemperature });
+}
+
+/** Members may follow or unfollow only themselves; the database command binds the relationship to auth.uid(). */
+export async function setContactFollowing(contactId: string, follow: boolean): Promise<ContactCommandResult> {
+  const workspaceAccess = await getAuthorizedWorkspaceAccess();
+  if (!workspaceAccess || !getSupabaseConfiguration()) return { message: "Your workspace access could not be verified. Sign in again and try once more.", type: "error" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("crm_set_contact_following", { p_contact_id: contactId, p_follow: follow, p_workspace_id: workspaceAccess.workspaceId });
+  return error ? { message: contactCommandError(error.code), type: "error" } : { type: "success" };
 }
 
 /** Maps expected database command failures to errors that help an operator correct the form. */
@@ -220,4 +395,13 @@ function saveErrorMessage(code: string | undefined) {
   if (code === "42501") return "Your workspace permissions changed. Sign in again and try once more.";
 
   return "The contact could not be saved. Try again shortly.";
+}
+
+function contactCommandError(code: string | undefined) {
+  if (code === "22023") return "Check the contact method or reply state, then try again.";
+  if (code === "23503") return "Choose an active workspace member for this assignment.";
+  if (code === "23505") return "This contact method is already recorded.";
+  if (code === "P0002") return "This contact or method is no longer available. Refresh and try again.";
+  if (code === "42501") return "Your workspace permissions changed. Sign in again and try once more.";
+  return "The contact change could not be saved. Try again shortly.";
 }

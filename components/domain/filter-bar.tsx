@@ -11,13 +11,23 @@ import { cn } from "@/lib/utils";
 type FilterOption = { label: string; value: string };
 
 type FilterBarProps = {
+  filterLabel?: string;
   filters: readonly FilterOption[];
+  searchLabel?: string;
+  searchPlaceholder?: string;
   searchValue: string;
   selectedFilter: string;
 };
 
-/** Keeps contact filtering in the URL so searches, pagination, and browser navigation stay server-backed. */
-export function FilterBar({ filters, searchValue, selectedFilter }: FilterBarProps) {
+/** Keeps directory filtering in the URL so searches, pagination, and browser navigation stay server-backed. */
+export function FilterBar({
+  filterLabel = "Contact filters",
+  filters,
+  searchLabel = "Search contacts",
+  searchPlaceholder = "Search people, companies, or emails",
+  searchValue,
+  selectedFilter,
+}: FilterBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,11 +56,11 @@ export function FilterBar({ filters, searchValue, selectedFilter }: FilterBarPro
       }}
     >
       <label className="relative block min-w-0 flex-1">
-        <span className="sr-only">Search contacts</span>
+        <span className="sr-only">{searchLabel}</span>
         <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--ink-muted)]" />
-        <Input className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder="Search people, companies, or emails" value={search} />
+        <Input className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder={searchPlaceholder} value={search} />
       </label>
-      <div aria-label="Contact filters" className="flex items-center gap-1.5 overflow-x-auto">
+      <div aria-label={filterLabel} className="flex items-center gap-1.5 overflow-x-auto">
         <SlidersIcon className="ml-1 size-4 shrink-0 text-[var(--ink-muted)]" />
         {filters.map((filter) => (
           <button
