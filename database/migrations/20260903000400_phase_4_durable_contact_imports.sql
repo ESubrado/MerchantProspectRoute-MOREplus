@@ -1,6 +1,9 @@
--- Phase 4 adds durable, disabled-by-default CSV contact imports owned entirely by this project.
+﻿-- Fresh/reset database baseline: Phase 4 durable contact imports.
+-- Apply this phase-level migration only to a new or reset database, in filename order.
 begin;
 
+-- Consolidated from 20260903000900_phase_4_durable_contact_imports.sql.
+-- Phase 4 adds durable, disabled-by-default CSV contact imports owned entirely by this project.
 create type public.contact_import_status as enum (
   'awaiting_upload',
   'processing',
@@ -929,5 +932,6 @@ grant execute on function public.crm_get_contact_import_worker_state(uuid, uuid)
 grant execute on function public.crm_complete_contact_import_job(uuid, uuid) to service_role;
 grant execute on function public.crm_list_expired_contact_import_sources(integer) to service_role;
 grant execute on function public.crm_mark_contact_import_source_deleted(uuid) to service_role;
+
 
 commit;

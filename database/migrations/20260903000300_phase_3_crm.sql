@@ -1,6 +1,9 @@
--- Phase 3 completes the owned CRM commands for companies and contact-detail relationships.
+﻿-- Fresh/reset database baseline: Phase 3 CRM domain commands.
+-- Apply this phase-level migration only to a new or reset database, in filename order.
 begin;
 
+-- Consolidated from 20260903000800_phase_3_crm_domain_commands.sql.
+-- Phase 3 completes the owned CRM commands for companies and contact-detail relationships.
 -- Company records gain the contact fields needed by the target's editable company directory.
 alter table public.companies
   add column phone_number text check (phone_number is null or phone_number ~ '^\+[1-9][0-9]{1,14}$'),
@@ -944,5 +947,6 @@ grant execute on function public.crm_set_contact_assignment(uuid, uuid, uuid) to
 grant execute on function public.crm_set_contact_following(uuid, uuid, boolean) to authenticated;
 grant execute on function public.crm_set_contact_reply_state(uuid, uuid, integer, boolean) to authenticated;
 grant execute on function public.crm_update_contact_profile(uuid, uuid, text, text, uuid, text, text, text) to authenticated;
+
 
 commit;
