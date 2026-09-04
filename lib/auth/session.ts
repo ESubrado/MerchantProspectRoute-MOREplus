@@ -17,6 +17,11 @@ export type WorkspaceAccess = {
   workspaceName: string;
 };
 
+export type WorkspaceCampaignAccess = WorkspaceAccess & {
+  campaignId: string;
+  campaignName: string;
+};
+
 function metadataText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
@@ -77,6 +82,30 @@ export async function getAuthorizedWorkspaceAccess(): Promise<WorkspaceAccess | 
   const role = workspaceRole(membership?.role);
 
   return workspaceId && workspaceName && role ? { role, userId: user.id, workspaceId, workspaceName } : null;
+}
+
+/** Resolves the workspace's database-owned campaign before an outreach command or query can use campaign-owned records. */
+export async function getAuthorizedWorkspaceCampaignAccess(): Promise<WorkspaceCampaignAccess | null> {
+  const workspaceAccess = await getAuthorizedWorkspaceAccess();
+
+  if (!workspaceAccess || !getSupabaseConfiguration()) {
+    return null;
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("campaign_resolve_workspace_campaign", {
+    p_workspace_id: workspaceAccess.workspaceId,
+  });
+
+  if (error || !data || data.length !== 1) {
+    return null;
+  }
+
+  const campaign = record(data[0]);
+  const campaignId = metadataText(campaign?.campaign_id);
+  const campaignName = metadataText(campaign?.campaign_name);
+
+  return campaignId && campaignName ? { ...workspaceAccess, campaignId, campaignName } : null;
 }
 
 /** Resolves a signed-in user and their database-authorized workspace for the application shell. */

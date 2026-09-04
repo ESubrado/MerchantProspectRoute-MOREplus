@@ -8,7 +8,7 @@ export default async function MailboxesPage() {
   const result = await getMailboxesPage();
 
   if (result.type === "error") {
-    return <div className="space-y-6"><PageHeader description="Review operator-recorded mailbox capacity and pause controls in your active workspace." eyebrow="Outreach / Delivery" title="Mailboxes" /><ScreenState action={<RetryButton />} description={result.message} title="Mailboxes are unavailable" type="error" /></div>;
+    return <div className="space-y-6"><PageHeader description="Review the mailbox capacity and pause controls for the current workspace campaign." eyebrow="Outreach / Current campaign" title="Mailboxes" /><ScreenState action={<RetryButton />} description={result.message} title="Mailboxes are unavailable" type="error" /></div>;
   }
 
   return <MailboxesScreen {...result} />;

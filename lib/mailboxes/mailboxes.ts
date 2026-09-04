@@ -1,5 +1,5 @@
 import { isWorkspaceManagerRole, type WorkspaceRole } from "@/lib/auth/roles";
-import { getAuthorizedWorkspaceAccess } from "@/lib/auth/session";
+import { getAuthorizedWorkspaceCampaignAccess } from "@/lib/auth/session";
 import { getSupabaseConfiguration } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -120,13 +120,14 @@ function mailboxFromRow(value: unknown): MailboxListItem | null {
 
 /** Loads mailbox state from the owned database projection; health rows are informational and never change status here. */
 export async function getMailboxesPage(): Promise<MailboxesPageResult> {
-  const workspaceAccess = await getAuthorizedWorkspaceAccess();
+  const workspaceAccess = await getAuthorizedWorkspaceCampaignAccess();
   if (!workspaceAccess || !getSupabaseConfiguration()) {
     return { message: "Your workspace access could not be verified. Sign in again and try once more.", type: "error" };
   }
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("mailbox_list_workspace_mailboxes", {
+    p_campaign_id: workspaceAccess.campaignId,
     p_workspace_id: workspaceAccess.workspaceId,
   });
 
@@ -142,7 +143,7 @@ export async function getMailboxesPage(): Promise<MailboxesPageResult> {
 
 /** Records an externally provisioned mailbox only after app and database authorization agree on a manager role. */
 export async function createWorkspaceMailbox(input: MailboxWriteInput): Promise<{ message?: string; type: "success" | "error" }> {
-  const workspaceAccess = await getAuthorizedWorkspaceAccess();
+  const workspaceAccess = await getAuthorizedWorkspaceCampaignAccess();
   if (!workspaceAccess || !isWorkspaceManagerRole(workspaceAccess.role) || !getSupabaseConfiguration()) {
     return { message: "Only workspace owners and admins can configure mailboxes.", type: "error" };
   }
@@ -154,7 +155,7 @@ export async function createWorkspaceMailbox(input: MailboxWriteInput): Promise<
 
 /** Updates mailbox state and its policy together so a status change cannot escape the corresponding policy audit event. */
 export async function updateWorkspaceMailbox(mailboxId: string, input: MailboxWriteInput): Promise<{ message?: string; type: "success" | "error" }> {
-  const workspaceAccess = await getAuthorizedWorkspaceAccess();
+  const workspaceAccess = await getAuthorizedWorkspaceCampaignAccess();
   if (!workspaceAccess || !isWorkspaceManagerRole(workspaceAccess.role) || !getSupabaseConfiguration()) {
     return { message: "Only workspace owners and admins can configure mailboxes.", type: "error" };
   }

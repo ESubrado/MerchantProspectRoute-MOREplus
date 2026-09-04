@@ -36,14 +36,16 @@ The database is the system of record. The provider adapter and object store are 
 | Contacts | `/contacts`, contact drawer/deep link | Search/list contacts; create; manage methods; set temperature/DNC; assignment/followers; linked conversations and sequence execution. |
 | Companies | `/companies`, company drawer/deep link | Search/list companies; edit core company fields; show linked contacts. |
 | Imports | Contact-page dialog/status | Create job, issue scoped upload authorization, enqueue work, expose read-only job progress. |
-| Mailboxes | `/mailboxes`, mailbox detail/settings | List state/health; enable/disable; configure send policy and workspace health threshold. Provisioning is a separate capability, initially out of UI scope. |
-| Sequences | `/sequences` | Manage sequences, ordered steps, template variants and schedules; display derived metrics. Support many sequences in the domain even if the first UI presents one current sequence. |
+| Mailboxes | `/mailboxes`, mailbox detail/settings | List state/health; enable/disable; configure policy for the current campaign's shared mailbox pool. Provisioning is a separate capability, initially out of UI scope. |
+| Sequences | `/sequences` | Manage the current campaign's many sequences, ordered steps, template variants and schedules; display campaign-scoped derived metrics. |
 | Lead execution | Lead detail/inbox panel | Start, stop, resume, and manually reassign a route; return route/state/history. Workers own automatic state transitions. |
 | Inbox | `/`, `/c/[conversationId]`, `/lead/[leadId]` | List conversations, retrieve/mark messages read, issue attachment downloads, submit reply/forward commands. |
 
 ## Data model
 
 Use UUID primary keys, workspace ownership on every tenant-owned record, UTC timestamps, immutable event/history records where applicable, and a transaction boundary for each command. The names below are target concepts, not an instruction to reuse the source schema verbatim.
+
+**Release invariant: one workspace → one campaign.** The campaign is a real owned record, not a workspace-name alias.
 
 ```text
 Workspace 1---* Member *---1 User
@@ -54,14 +56,17 @@ Lead 1---* LeadSocial
 Lead 1---0..1 LeadAssignment
 Lead 1---* LeadFollower
 
-Workspace 1---* Mailbox 1---0..1 SendPolicy
+Workspace 1---1 Campaign
+Campaign 1---* Mailbox 1---0..1 SendPolicy
 Mailbox 1---* DailySendUsage
-Lead 1---0..1 LeadMailboxRoute 1---* RouteEvent
+Campaign 1---* LeadMailboxRoute 1---* RouteEvent
 
-Workspace 1---* Sequence 1---* SequenceStep 1---* StepVariant
-Lead 1---* SequenceEnrollment 1---* SendAttempt
+Campaign 1---* Sequence 1---* SequenceStep 1---* StepVariant
+Lead 1---* SequenceEnrollment *---1 Campaign
+SequenceEnrollment 1---* SendAttempt
 SendAttempt *---1 Mailbox
 
+Campaign 1---* Conversation
 Mailbox 1---* Conversation 0..1---1 Lead
 Conversation 1---* Message 1---* Attachment
 Workspace 1---* ImportJob
@@ -70,18 +75,21 @@ Workspace 1---* ImportJob
 ### Required domain invariants
 
 - A user can access only records in an active workspace membership. Admin-only commands include manual lead creation/import, mailbox configuration, sequence editing and execution controls.
+- Each workspace has exactly one database-owned campaign in the current release. A unique `campaigns.workspace_id`, bootstrap trigger, resolver, RLS, and command checks make a second campaign impossible through the UI, server commands, concurrent requests, or authenticated direct database access. There is no campaign create/list/switch/delete UI or API.
+- The campaign owns every mailbox and send policy. A mailbox has no sequence ownership, so every active mailbox in that campaign is eligible for the same future routing pool according to health, capacity, policy, and schedule.
 - A lead belongs to one workspace and may belong to one company. Its contact methods are independently managed; canonical email validation belongs to the reusable canonical-email record.
 - There is at most one current assignment per lead. Followers are unique per lead/user.
 - Reply temperature is nullable or one of `0..4`; setting DNC (`3`) sets an explicit email DNC flag. Automated classification must be auditable and must not overwrite a manual decision without a deliberate policy.
 - A lead has at most one current mailbox route. Reassignment writes an immutable route event with reason, actor and timestamp.
-- A sequence has ordered, unique steps and each step has one or more variants. State-changing commands validate ownership, status and schedule before commit.
-- Sequence enrollment and send attempts use explicit state machines; attempts must be idempotent against provider submission and webhook retries.
+- A campaign has many sequences; each sequence owns ordered, unique steps, schedules, and variants. State-changing commands validate workspace membership and resolved campaign ownership before commit.
+- A contact has at most one active enrollment across all sequences in its workspace campaign. A partial unique database index, not client timing, enforces the rule under concurrent enrollment attempts. Sequence enrollment and send attempts use explicit state machines; attempts must be idempotent against provider submission and webhook retries.
+- Future routes, send attempts, conversations, and campaign metrics must store `campaign_id` directly or be reachable through a parent whose composite campaign foreign key is enforced. New outreach commands must scope workspace membership and campaign ownership together.
 - A conversation is linked to a mailbox and optionally a lead. Inbox visibility follows the source rule: sequence-started threads become inbox-visible after an inbound message. Messages and attachments are immutable other than `is_read`/local read state.
 - Object storage holds files only; metadata, ownership and access checks remain in the database. Downloads use short-lived, workspace-authorized URLs.
 
 ## Command/query boundaries
 
-Queries are read-only and return projection DTOs tailored to the screen: contact/company directories, mailbox rows, sequence detail/statistics, lead execution detail, conversation list and thread. Searches must be tenant-scoped before full-text/trigram ranking is applied.
+Queries are read-only and return projection DTOs tailored to the screen: contact/company directories, current-campaign mailbox rows, current-campaign sequence detail/statistics, lead execution detail, conversation list and thread. Searches must be tenant-scoped before full-text/trigram ranking is applied. Outreach queries also resolve and verify the workspace campaign; campaign IDs never come from an untrusted UI selection in this release.
 
 Commands make one business change and publish/enqueue work transactionally where required:
 
@@ -89,8 +97,8 @@ Commands make one business change and publish/enqueue work transactionally where
 | --- | --- | --- |
 | Lead/company/contact-method changes | Updated entity/projection or validation error | None, except optional validation/enrichment explicitly introduced later |
 | Create CSV import | Job ID and scoped upload target | Import worker processes bytes, writes totals/status |
-| Mailbox policy/status change | Updated policy/state | Optional health policy reconciliation |
-| Sequence configuration | Updated configuration/version | Scheduler recomputes eligible work if an active sequence changed |
+| Mailbox policy/status change | Updated campaign-owned policy/state | Optional health policy reconciliation |
+| Sequence configuration | Updated current-campaign configuration/version | Scheduler recomputes eligible work if an active sequence changed |
 | Start/stop/resume/reassign lead execution | New state/route projection | Scheduler queues/cancels/re-evaluates attempts |
 | Send reply/forward | Accepted command/attempt reference | Provider adapter sends and webhook/response writes durable message status |
 | Provider inbound event | Idempotent acknowledgement | Persist message/conversation/attachment metadata; classify reply; stop/advance enrollment according to policy |
@@ -107,8 +115,8 @@ Commands make one business change and publish/enqueue work transactionally where
 ### Sequence scheduler and dispatcher
 
 1. Find active enrollments whose next step is eligible in the step/sequence timezone.
-2. Enforce lead DNC, bounce/reply terminal rules, mailbox active/health status, policy pause, daily cap, schedule window, throttle and jitter.
-3. Select a route (persist it once) and an active variant; create a uniquely keyed send attempt before any provider call.
+2. Enforce lead DNC, bounce/reply terminal rules, campaign mailbox active/health status, policy pause, daily cap, schedule window, throttle and jitter.
+3. Select from the campaign's shared mailbox pool (persist a route once) and an active variant; create a uniquely keyed send attempt before any provider call.
 4. A dispatcher claims the attempt with a lease, sends through the project-owned provider adapter, and commits submitted/sent/failed/bounced/cancelled state idempotently.
 5. Update enrollment state and next eligibility in the same command boundary. Derived stats are materialized or queried from indexed facts, not handwritten in the UI.
 
@@ -122,7 +130,7 @@ Commands make one business change and publish/enqueue work transactionally where
 ## Security and operational requirements
 
 - Keep provider credentials, service credentials and object-store signing keys server/worker-only. Never expose a service role or mailbox token to a browser.
-- Enforce workspace authorization in every query, command, signed-upload/download path, worker claim and webhook-to-record match. Do not rely solely on page protection.
+- Enforce workspace authorization and campaign ownership in every outreach query, command, worker claim, and webhook-to-record match. Do not rely solely on page protection.
 - Sanitize rendered email HTML; constrain outbound HTML/link generation; enforce recipient and attachment limits server-side.
 - Record audit events for imports, route changes, policy changes, sequence state transitions and automated DNC/reply actions.
 - Instrument job/worker lease failures, provider failures, webhook deduplication, send-cap rejection and stuck enrollment detection. Provide an operator-visible error state before adding automatic retries.
@@ -132,6 +140,14 @@ Commands make one business change and publish/enqueue work transactionally where
 - Reusing the reference application's Supabase project, generated types, Edge Functions, buckets, keys, or database.
 - Staff provisioning, invitations and role-management UI beyond the minimal protected-workspace mechanism required to run this scope.
 - Mailbox connection/provisioning UI, email enrichment, call workflows, arbitrary campaign analytics, billing and unrelated product features.
+- Multi-campaign behavior: campaign creation/listing/switching/deletion, cross-campaign routing, campaign URLs, and a campaign picker are deliberately absent until a separately approved release.
+
+## Future multi-campaign migration path
+
+1. Keep every existing `campaigns.id` and every campaign-linked child row unchanged; do not collapse or recreate the current campaign.
+2. Deliberately remove or replace `campaigns_one_per_workspace_key` with the future uniqueness rule (for example, a workspace-local campaign slug), then add an authorized campaign-create command.
+3. Add an explicit, membership-authorized campaign selection mechanism to the session and routes. Pass its selected campaign ID through every outreach query/command and retain the existing composite workspace/campaign foreign keys.
+4. Add campaign list/switch UI only after selection authorization, routing behavior, metrics filters, audit semantics, and tests cover cross-campaign isolation. Existing workspace mailboxes, policies, sequences, schedules, variants, enrollments, and later records remain linked to their original campaign IDs.
 
 ## Build order after this discovery phase
 

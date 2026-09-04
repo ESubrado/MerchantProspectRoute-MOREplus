@@ -54,7 +54,7 @@ test("Phase 5 models atomic, idempotent daily capacity claims without exposing a
 });
 
 test("Phase 5 replaces the static screen with server-backed, admin-only configuration controls", () => {
-  assert.match(mailboxData, /getAuthorizedWorkspaceAccess/);
+  assert.match(mailboxData, /getAuthorizedWorkspaceCampaignAccess/);
   assert.match(mailboxData, /isWorkspaceManagerRole\(workspaceAccess\.role\)/);
   assert.match(mailboxData, /mailbox_list_workspace_mailboxes/);
   assert.match(mailboxActions, /createMailboxAction/);
@@ -62,6 +62,6 @@ test("Phase 5 replaces the static screen with server-backed, admin-only configur
   assert.match(mailboxActions, /validIanaTimezone/);
   assert.match(mailboxScreen, /Record mailbox/);
   assert.match(mailboxScreen, /Manual pause/);
-  assert.match(mailboxScreen, /health automation, and dispatch remain intentionally disabled/i);
+  assert.match(mailboxScreen, /health automation, routing, and dispatch remain intentionally disabled/i);
   assert.match(mailboxScreen, /canManageMailboxes/);
 });
