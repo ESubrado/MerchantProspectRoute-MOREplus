@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { logout } from "@/app/actions/auth";
-import { LogOutIcon, PanelLeftIcon, SettingsIcon, UserIcon } from "@/components/icons";
+import { BuildingIcon, CheckIcon, ChevronDownIcon, LogOutIcon, PanelLeftIcon, SettingsIcon, UserIcon } from "@/components/icons";
 import { TopNavigation } from "@/components/top-navigation";
+import { isWorkspaceManagerRole } from "@/lib/auth/roles";
 import type { WorkspaceViewer } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,57 @@ function ProfileAvatar({
   }
 
   return <span aria-hidden="true" className={`grid size-8 place-items-center rounded-full ${fallbackClassName}`}><UserIcon className="size-4" /></span>;
+}
+
+function WorkspaceMenu({
+  collapsed = false,
+  menuRef,
+  placement,
+  viewer,
+}: {
+  collapsed?: boolean;
+  menuRef: RefObject<HTMLDetailsElement | null>;
+  placement: "up" | "down";
+  viewer: WorkspaceViewer;
+}) {
+  const menuPosition = placement === "up"
+    ? "bottom-[calc(100%+0.5rem)] left-0"
+    : "right-0 top-[calc(100%+0.5rem)]";
+  const roleLabel = viewer.role === "owner" ? "Workspace owner" : viewer.role === "admin" ? "Workspace administrator" : "Workspace member";
+
+  return (
+    <details className={cn("group relative", collapsed ? "shrink-0" : "min-w-0 flex-1")} ref={menuRef}>
+      <summary
+        aria-label={`Open ${viewer.workspaceName} workspace menu`}
+        className={cn(
+          "flex cursor-pointer list-none items-center rounded-lg text-white marker:content-none hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+          collapsed ? "size-9 justify-center p-1.5" : "h-9 min-w-0 gap-2 px-2",
+        )}
+        title={collapsed ? viewer.workspaceName : undefined}
+      >
+        <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-md bg-white/15 text-white">
+          <BuildingIcon className="size-3.5" />
+        </span>
+        <span className={cn("min-w-0 flex-1 text-left text-sm font-semibold", collapsed && "sr-only")}>
+          <span className="block truncate">{viewer.workspaceName}</span>
+        </span>
+        {!collapsed && <ChevronDownIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none" />}
+      </summary>
+      <div className={`absolute z-20 w-64 rounded-xl border border-[var(--line)] bg-white p-1.5 shadow-[0_16px_38px_rgb(19_33_45/0.14)] ${menuPosition}`}>
+        <p className="px-2.5 pb-1.5 pt-1 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--ink-muted)]">Current workspace</p>
+        <div className="flex items-center gap-2 rounded-lg bg-[var(--primary-soft)] px-2.5 py-2.5 text-[var(--primary)]">
+          <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-[var(--primary)] shadow-sm">
+            <BuildingIcon className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1 text-sm leading-tight">
+            <span className="block truncate font-semibold">{viewer.workspaceName}</span>
+            <span className="block truncate text-xs text-[var(--ink-muted)]">{roleLabel}</span>
+          </span>
+          <CheckIcon aria-label="Active workspace" className="size-4 shrink-0" />
+        </div>
+      </div>
+    </details>
+  );
 }
 
 function AccountMenu({
@@ -90,9 +142,13 @@ function AccountMenu({
 }
 
 export function AppShell({ children, viewer }: { children: ReactNode; viewer: WorkspaceViewer }) {
+  const sidebarWorkspaceMenuRef = useRef<HTMLDetailsElement>(null);
   const sidebarAccountMenuRef = useRef<HTMLDetailsElement>(null);
+  const mobileWorkspaceMenuRef = useRef<HTMLDetailsElement>(null);
   const mobileAccountMenuRef = useRef<HTMLDetailsElement>(null);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  // Owners and admins share manager controls while members retain a narrower workspace shell.
+  const canManageWorkspace = isWorkspaceManagerRole(viewer.role);
 
   useEffect(() => {
     function closeAccountMenu(event: PointerEvent) {
@@ -100,7 +156,7 @@ export function AppShell({ children, viewer }: { children: ReactNode; viewer: Wo
 
       if (!(target instanceof Node)) return;
 
-      [sidebarAccountMenuRef.current, mobileAccountMenuRef.current].forEach((menu) => {
+      [sidebarWorkspaceMenuRef.current, sidebarAccountMenuRef.current, mobileWorkspaceMenuRef.current, mobileAccountMenuRef.current].forEach((menu) => {
         if (menu?.open && !menu.contains(target)) {
           menu.open = false;
         }
@@ -110,7 +166,7 @@ export function AppShell({ children, viewer }: { children: ReactNode; viewer: Wo
     function closeAccountMenuOnEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
 
-      const openMenu = [sidebarAccountMenuRef.current, mobileAccountMenuRef.current].find((menu) => menu?.open);
+      const openMenu = [sidebarWorkspaceMenuRef.current, sidebarAccountMenuRef.current, mobileWorkspaceMenuRef.current, mobileAccountMenuRef.current].find((menu) => menu?.open);
 
       if (openMenu) {
         openMenu.open = false;
@@ -153,7 +209,10 @@ export function AppShell({ children, viewer }: { children: ReactNode; viewer: Wo
         <TopNavigation collapsed={!sidebarExpanded} mode="sidebar" />
 
         <div className={cn("border-t border-white/12 py-3", sidebarExpanded ? "px-4" : "flex justify-center px-2")}>
-          <AccountMenu menuRef={sidebarAccountMenuRef} placement="up" viewer={viewer} />
+          <div className={cn("flex w-full items-center gap-1", canManageWorkspace ? "justify-center" : "justify-start")}>
+            {canManageWorkspace && <WorkspaceMenu collapsed={!sidebarExpanded} menuRef={sidebarWorkspaceMenuRef} placement="up" viewer={viewer} />}
+            <AccountMenu menuRef={sidebarAccountMenuRef} placement="up" viewer={viewer} />
+          </div>
         </div>
       </aside>
 
@@ -166,7 +225,8 @@ export function AppShell({ children, viewer }: { children: ReactNode; viewer: Wo
               </span>
               <span className="text-base font-medium tracking-tight text-white">SÜRNMORE</span>
             </Link>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-1">
+              {canManageWorkspace && <WorkspaceMenu collapsed menuRef={mobileWorkspaceMenuRef} placement="down" viewer={viewer} />}
               <AccountMenu menuRef={mobileAccountMenuRef} placement="down" viewer={viewer} />
             </div>
           </div>

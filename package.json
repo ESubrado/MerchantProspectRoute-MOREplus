@@ -6,6 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "node database/tests/run.mjs",
+    "imports:worker": "node scripts/contact-import-worker.mjs",
+    "imports:worker:watch": "node scripts/contact-import-worker.mjs --watch",
+    "imports:cleanup": "node scripts/contact-import-cleanup.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
   },

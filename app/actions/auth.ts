@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { getAuthorizedWorkspaceAccess } from "@/lib/auth/session";
 import { getSupabaseConfiguration } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,6 +27,15 @@ export async function login(_previousState: LoginState, formData: FormData): Pro
 
   if (error) {
     return { error: "Invalid email or password." };
+  }
+
+  // Authentication creates a session; the DAL must separately confirm the tenant membership before entering protected routes.
+  const workspaceAccess = await getAuthorizedWorkspaceAccess();
+
+  if (!workspaceAccess) {
+    return {
+      error: "Your password was accepted, but this account does not have an active workspace membership. Ask a workspace administrator to grant access.",
+    };
   }
 
   revalidatePath("/", "layout");

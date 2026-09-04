@@ -60,6 +60,10 @@ export function ChevronDownIcon(props: IconProps) {
   return <Icon {...props}><path d="m6 9 6 6 6-6" /></Icon>;
 }
 
+export function CheckIcon(props: IconProps) {
+  return <Icon {...props}><path d="m5 12.5 4.2 4.2L19.5 6.5" /></Icon>;
+}
+
 export function PanelLeftIcon(props: IconProps) {
   return <Icon {...props}><rect height="17" rx="2" width="19" x="2.5" y="3.5" /><path d="M9 3.5v17M13 9l3 3-3 3" /></Icon>;
 }

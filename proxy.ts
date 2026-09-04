@@ -35,8 +35,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // The login page redirects verified signed-in users to the workspace.
   if (user && request.nextUrl.pathname === "/login") {
-    return NextResponse.redirect(new URL("/", request.url));
+    return response;
   }
 
   return response;

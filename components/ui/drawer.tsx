@@ -11,10 +11,12 @@ type DrawerProps = {
   description?: string;
   onClose: () => void;
   open: boolean;
+  size?: "default" | "wide";
   title: string;
 };
 
-export function Drawer({ children, description, onClose, open, title }: DrawerProps) {
+/** Renders a responsive right-side panel; wide mode supports dense workspace editors without affecting standard drawers. */
+export function Drawer({ children, description, onClose, open, size = "default", title }: DrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -31,7 +33,7 @@ export function Drawer({ children, description, onClose, open, title }: DrawerPr
     <dialog
       aria-describedby={description ? descriptionId : undefined}
       aria-labelledby={titleId}
-      className="m-0 ml-auto h-dvh w-full max-w-xl border-0 bg-transparent p-0 backdrop:bg-transparent"
+      className={`m-0 ml-auto h-dvh w-full ${size === "wide" ? "max-w-6xl" : "max-w-xl"} border-0 bg-transparent p-0 backdrop:bg-transparent`}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -42,14 +44,14 @@ export function Drawer({ children, description, onClose, open, title }: DrawerPr
       ref={dialogRef}
     >
       <div className="flex h-full flex-col border-l border-[var(--line)] bg-[var(--surface)] shadow-[-18px_0_45px_rgb(19_33_45/0.14)]">
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-5 sm:px-6">
+        <div className={`flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-5 ${size === "wide" ? "sm:px-8" : "sm:px-6"}`}>
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-[var(--ink)]" id={titleId}>{title}</h2>
             {description ? <p className="mt-1 text-sm leading-6 text-[var(--ink-muted)]" id={descriptionId}>{description}</p> : null}
           </div>
           <Button aria-label="Close panel" onClick={onClose} size="icon" variant="ghost"><CloseIcon className="size-4" /></Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-6">{children}</div>
+        <div className={`min-h-0 flex-1 overflow-y-auto px-5 py-6 ${size === "wide" ? "sm:px-8 sm:py-8" : "sm:px-6"}`}>{children}</div>
       </div>
     </dialog>
   );

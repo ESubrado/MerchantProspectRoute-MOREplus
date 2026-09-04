@@ -8,7 +8,8 @@ export default async function HomePage() {
   const viewer = await getWorkspaceViewer();
 
   if (!viewer) {
-    redirect("/login");
+    // Keep the root route consistent with protected pages when tenant authorization cannot be resolved.
+    redirect("/login?reason=workspace-access");
   }
 
   return <AppShell viewer={viewer}><HomeScreen /></AppShell>;
