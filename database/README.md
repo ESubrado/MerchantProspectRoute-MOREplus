@@ -15,6 +15,7 @@ The versioned migrations in [`migrations`](./migrations) establish the tenant an
 - `20260903000700_phase_2_contact_name_parts.sql` changes Contacts writes to use first and last names while deriving the existing full-name directory label.
 - `20260903000800_phase_3_crm_domain_commands.sql` adds the tenant-safe Companies directory/detail/edit commands and complete contact-method, assignment, follower, reply-state, and email-DNC commands.
 - `20260903000900_phase_4_durable_contact_imports.sql` adds disabled-by-default, workspace-scoped durable CSV jobs, row outcomes, a private Storage bucket, worker leases, and cleanup commands.
+- `20260904000100_phase_5_mailbox_policy_domain.sql` adds workspace-scoped, externally provisioned mailbox records; an audited policy with local-day timezones, limits, ramps, active/paused state, and manual pauses; provider-neutral health observations; and service-role-only atomic daily-capacity reservation/finalization commands.
 
 Every CRM table has a `workspace_id`; composite foreign keys prevent a child record from referring to a parent in another workspace. Owners and admins may change shared CRM data, while members can read their active workspace and follow/unfollow themselves. Audit events are readable in the workspace but are append-only and may be written only by trusted server or worker code that bypasses browser RLS.
 
@@ -35,6 +36,16 @@ Phase 3 makes the Companies route database-backed and completes the CRM relation
 Phase 4 adds a project-owned private `contact-imports` bucket, disabled-by-default workspace import setting, durable contact-import job records, bounded row errors, service-role worker claims, resumable batches, counters, and 30-day source cleanup. The Contacts button is intentionally disabled with an **Imports coming soon** explanation. That presentation is backed by the database: job creation remains denied unless a database owner enables a workspace after deploying the worker.
 
 Apply `20260903000900_phase_4_durable_contact_imports.sql` after all earlier migrations. Import jobs, Storage uploads, and service-role worker access require the additional server-only `SUPABASE_SERVICE_ROLE_KEY`; it must never be exposed as a `NEXT_PUBLIC_` value. See [the Phase 4 import runbook](../docs/contact-import-runbook.md) for mapping, dedupe, file-limit, retention, scheduler, recovery, and staged-enable requirements.
+
+## Phase 5 mailbox and policy domain
+
+Apply `20260904000100_phase_5_mailbox_policy_domain.sql` after every earlier migration and before deploying the Phase 5 Mailboxes UI. It creates no mailbox provider connection, provider credential, webhook, sender, queue, worker, cron task, health-source integration, or health-trigger automation.
+
+After deployment, a workspace owner or admin can use **Outreach → Mailboxes → Record mailbox** to register an already externally provisioned address, choose its local-day IANA timezone, set its hard daily capacity and optional ramp, and explicitly activate or pause the record. A manual pause requires a reason, forces the mailbox to paused, blocks all future capacity reservations, and is only cleared by a subsequent audited configuration update. The application never provisions the actual mailbox and never sends email in Phase 5.
+
+The migration includes dormant, service-role-only `mailbox_reserve_daily_capacity` and `mailbox_finalize_daily_capacity` commands. They lock mailbox and daily usage state, require a unique request key, and protect `reserved_count + consumed_count` against the calculated local-day capacity. Do not grant these commands to `authenticated`, call them from the browser, or run a sender until a separate dispatch phase defines queue, provider, retry, release/consume, and audit behavior.
+
+There are **no new environment variables** for Phase 5. Continue to keep the existing public Supabase URL/anon key browser-safe and any service-role credential server-only; Phase 5 does not require setting `SUPABASE_SERVICE_ROLE_KEY` because it deploys no capacity worker.
 
 ## Prerequisites and environment
 
@@ -69,7 +80,9 @@ where schemaname = 'public'
   and tablename in (
     'workspaces', 'workspace_members', 'companies', 'leads',
     'canonical_email_addresses', 'lead_email_addresses', 'lead_phone_numbers',
-    'lead_social_profiles', 'lead_assignments', 'lead_followers', 'audit_events'
+    'lead_social_profiles', 'lead_assignments', 'lead_followers', 'audit_events',
+    'mailboxes', 'mailbox_sending_policies', 'mailbox_daily_usage',
+    'mailbox_capacity_reservations', 'mailbox_health_observations'
   )
 order by tablename;
 ```
