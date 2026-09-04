@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const migration = await readFile(new URL("../migrations/20260903000900_phase_4_durable_contact_imports.sql", import.meta.url), "utf8");
+const migration = await readFile(new URL("../migrations/20260903000400_phase_4_durable_contact_imports.sql", import.meta.url), "utf8");
 const importData = await readFile(new URL("../../lib/imports/contact-imports.ts", import.meta.url), "utf8");
 const importContract = await readFile(new URL("../../lib/imports/contract.ts", import.meta.url), "utf8");
 const importActions = await readFile(new URL("../../app/actions/imports.ts", import.meta.url), "utf8");

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const migration = await readFile(new URL("../migrations/20260903000800_phase_3_crm_domain_commands.sql", import.meta.url), "utf8");
-const foundationSchema = await readFile(new URL("../migrations/20260903000100_phase_1_workspace_crm_schema.sql", import.meta.url), "utf8");
+const migration = await readFile(new URL("../migrations/20260903000300_phase_3_crm.sql", import.meta.url), "utf8");
+const foundationSchema = await readFile(new URL("../migrations/20260903000100_phase_1_workspace_crm.sql", import.meta.url), "utf8");
 const companiesData = await readFile(new URL("../../lib/crm/companies.ts", import.meta.url), "utf8");
 const companiesActions = await readFile(new URL("../../app/actions/companies.ts", import.meta.url), "utf8");
 const companiesScreen = await readFile(new URL("../../components/screens/companies-screen.tsx", import.meta.url), "utf8");

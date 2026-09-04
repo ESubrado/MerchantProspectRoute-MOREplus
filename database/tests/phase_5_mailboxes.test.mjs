@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const migration = await readFile(new URL("../migrations/20260904000100_phase_5_mailbox_policy_domain.sql", import.meta.url), "utf8");
+const migration = await readFile(new URL("../migrations/20260903000500_phase_5_mailbox_and_campaign_domain.sql", import.meta.url), "utf8");
 const mailboxData = await readFile(new URL("../../lib/mailboxes/mailboxes.ts", import.meta.url), "utf8");
 const mailboxActions = await readFile(new URL("../../app/actions/mailboxes.ts", import.meta.url), "utf8");
 const mailboxScreen = await readFile(new URL("../../components/screens/mailboxes-screen.tsx", import.meta.url), "utf8");
@@ -49,7 +49,8 @@ test("Phase 5 models atomic, idempotent daily capacity claims without exposing a
   assert.match(migration, /usage_record\.reserved_count \+ usage_record\.consumed_count \+ p_quantity > calculated_capacity/i);
   assert.match(migration, /on conflict \(workspace_id, mailbox_id, local_day\) do nothing/i);
   assert.match(migration, /grant execute on function public\.mailbox_reserve_daily_capacity[\s\S]*to service_role/i);
-  assert.doesNotMatch(migration, /grant execute on function public\.mailbox_reserve_daily_capacity[\s\S]*to authenticated/i);
+  assert.match(migration, /grant execute on function public\.mailbox_reserve_daily_capacity\(uuid, uuid, uuid, uuid, integer\) to service_role/i);
+  assert.doesNotMatch(migration, /grant execute on function public\.mailbox_reserve_daily_capacity\([^;]*\) to authenticated/i);
   assert.match(migration, /Mailbox is paused and cannot reserve daily capacity/i);
 });
 

@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const migration = await readFile(new URL("../migrations/20260903000300_phase_2_contacts_commands.sql", import.meta.url), "utf8");
-const lifecycleMigration = await readFile(new URL("../migrations/20260903000600_phase_2_lead_lifecycle_fields.sql", import.meta.url), "utf8");
-const namePartsMigration = await readFile(new URL("../migrations/20260903000700_phase_2_contact_name_parts.sql", import.meta.url), "utf8");
+const migration = await readFile(new URL("../migrations/20260903000200_phase_2_contacts.sql", import.meta.url), "utf8");
+const lifecycleMigration = migration;
+const namePartsMigration = migration;
 const dataLayer = await readFile(new URL("../../lib/crm/contacts.ts", import.meta.url), "utf8");
 const actions = await readFile(new URL("../../app/actions/contacts.ts", import.meta.url), "utf8");
 const screen = await readFile(new URL("../../components/screens/contacts-screen.tsx", import.meta.url), "utf8");

@@ -52,7 +52,7 @@ A worker checks waiting jobs for their private object. A browser closing after u
 
 ## Deployment and worker runbook
 
-1. Apply all migrations in lexical order, including `20260903000900_phase_4_durable_contact_imports.sql`, as the database owner.
+1. Apply the six fresh/reset baseline migrations in lexical order, including `20260903000400_phase_4_durable_contact_imports.sql`, as the database owner.
 2. Confirm that the private `contact-imports` bucket exists and remains non-public. Do not add direct authenticated Storage policies for it.
 3. Set these secrets only in the Next.js server and worker runtime; never expose them to the browser:
 

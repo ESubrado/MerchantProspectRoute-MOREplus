@@ -4,9 +4,13 @@
 
 This register compares the requested standalone scope with the checked-in source at `af98b0aade26394a80395b1ff81c29d22a375fd9`. A source UI, query, generated type, RPC call or Edge Function invocation is not a backend implementation. No missing item below will be satisfied by connecting the new project to the source repository or its services.
 
-## Phase 5.1 campaign boundary
+## Phase 5 campaign boundary
 
 The standalone target now has a project-owned `campaigns` table with an enforced **one workspace → one campaign** invariant. Workspace bootstrap creates the campaign atomically; a first-authorized-access resolver repairs only an interrupted legacy bootstrap and cannot select a name or create a second campaign. Campaign ownership is explicit on mailboxes and send policies, sequence configuration/enrollment is campaign-scoped, and every new outreach command verifies workspace membership plus campaign ownership. The constraint, not a UI convention, prevents concurrent or direct authenticated creation of a second campaign. The exact future multi-campaign release path is recorded in the target architecture: relax `campaigns_one_per_workspace_key`, retain all current campaign-linked records, then add authorized selection before any UI or routing behavior.
+
+## Phase 6 sequence configuration boundary
+
+The standalone target now persists real configuration drafts: schedules with IANA timezones and non-overlapping weekly windows, throttle and jitter, ordered steps, and provider-neutral subject/body variants. Database commands lock the campaign-scoped rows and validate full ordering before reordering or activation. An active state means only that the configuration is complete; it does not create enrollment or dispatch work. The UI therefore shows **Automation not configured** rather than send, enrollment, or delivery metrics. Routing, the enrollment state machine, scheduler/queue, provider adapter, and all delivery behavior remain the blocker work described below.
 
 | ID | Severity | Gap / evidence | Impact on target | Required target decision or implementation |
 | --- | --- | --- | --- | --- |
@@ -29,7 +33,7 @@ The standalone target now has a project-owned `campaigns` table with an enforced
 | BG-17 | Medium | The source uses derived views (`lead_directory`, `company_directory`, sequence stats views) for performance and search RPCs because RLS can inhibit indexing. Definitions are absent. | Naive target queries may be slow or leak tenant search results. | Create tenant-safe query projections/indexes and benchmark paginated sort/count/search at expected data volumes. |
 | BG-18 | Medium | Source composer encodes new attachments in request memory (10 MB total) and forwards calls to a missing function. | Large/slow requests, provider rejection and partial persistence are undefined. | Use a server-side send command with strict recipient/size/content rules; define new-vs-forwarded attachment handling and final provider persistence. |
 | BG-19 | Medium | No message retention, audit, PII, malware scanning, error handling or operational tooling is checked in. | The product handles sensitive contact and email data without an operational safety contract. | Define retention/deletion, audit access, scanning, redaction, retry/dead-letter, alerting and support/replay procedures. |
-| BG-20 | Resolved in Phase 5.1 | The source sequence page chooses only the first non-archived sequence despite APIs supporting multiple sequences. | Copying UI behavior would hide valid sequences or imply multiple workspace campaigns. | The target lists and creates many sequences under the one resolved workspace campaign. Sequence configuration remains inert until dispatch work is deliberately implemented. |
+| BG-20 | Resolved in Phase 5 | The source sequence page chooses only the first non-archived sequence despite APIs supporting multiple sequences. | Copying UI behavior would hide valid sequences or imply multiple workspace campaigns. | The target lists and creates many sequences under the one resolved workspace campaign. Sequence configuration remains inert until dispatch work is deliberately implemented. |
 | BG-21 | Low | Generated types include unused `sequence_sandbox_messages`, `workspace_invitations`, extension helpers and dispatch helpers. | Treating generated declarations as requirements would expand scope without evidence. | Exclude unless a later requirement explicitly adopts them; do not build speculative features. |
 
 ## Assumptions to validate before implementation
@@ -56,4 +60,4 @@ These items should be considered requirements to design, not source implementati
 - Edge Function contracts: `process-lead-import`, `send-message`; `create-staff-member` is excluded from the target feature scope.
 - Remote conventions relied on by source comments: phone/social normalization triggers, company uniqueness, contact access, mailbox health automation, import-job authorization, and attachment Storage RLS.
 
-The remaining items are still gaps rather than permission to reuse source infrastructure. Phase 5.1 deliberately closes only the standalone campaign ownership boundary; it does not silently enable the remaining provider, routing, dispatch, or inbox work.
+The remaining items are still gaps rather than permission to reuse source infrastructure. Phase 5 deliberately closes only the standalone campaign ownership boundary; it does not silently enable the remaining provider, routing, dispatch, or inbox work.

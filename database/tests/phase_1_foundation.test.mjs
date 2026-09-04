@@ -3,11 +3,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-// Migration paths step out of the tests directory, while the session path steps out of database.
-const schema = await readFile(new URL("../migrations/20260903000100_phase_1_workspace_crm_schema.sql", import.meta.url), "utf8");
-const rls = await readFile(new URL("../migrations/20260903000200_phase_1_workspace_crm_rls.sql", import.meta.url), "utf8");
-const ownerRoleMigration = await readFile(new URL("../migrations/20260903000400_phase_1_owner_role.sql", import.meta.url), "utf8");
-const ownerAuthorizationMigration = await readFile(new URL("../migrations/20260903000500_phase_1_owner_authorization.sql", import.meta.url), "utf8");
+// The fresh baseline keeps the complete Phase 1 schema, RLS, and owner authorization in one migration.
+const phaseOneMigration = await readFile(new URL("../migrations/20260903000100_phase_1_workspace_crm.sql", import.meta.url), "utf8");
+const schema = phaseOneMigration;
+const rls = phaseOneMigration;
 const session = await readFile(new URL("../../lib/auth/session.ts", import.meta.url), "utf8");
 const authAction = await readFile(new URL("../../app/actions/auth.ts", import.meta.url), "utf8");
 
@@ -47,9 +46,8 @@ test("Phase 1 enables RLS and protects its authorization invariants", () => {
   assert.match(rls, /create or replace function public\.is_active_workspace_member/i);
   assert.match(rls, /create or replace function public\.is_workspace_admin/i);
   assert.match(rls, /membership\.role in \('owner', 'admin'\)/i);
-  // The forward migrations keep existing database deployments aligned with fresh-schema owner semantics.
-  assert.match(ownerRoleMigration, /alter type public\.workspace_role add value 'owner'/i);
-  assert.match(ownerAuthorizationMigration, /membership\.role in \('owner', 'admin'\)/i);
+  assert.match(phaseOneMigration, /create type public\.workspace_role as enum \('owner', 'admin', 'member'\)/i);
+  assert.match(phaseOneMigration, /membership\.role in \('owner', 'admin'\)/i);
   assert.match(rls, /create trigger audit_events_are_immutable/i);
   assert.doesNotMatch(rls, /audit_events_(insert|update|delete)/i);
 });
