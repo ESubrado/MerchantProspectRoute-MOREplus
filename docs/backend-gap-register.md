@@ -10,7 +10,7 @@ The standalone target now has a project-owned `campaigns` table with an enforced
 
 ## Phase 6 sequence configuration boundary
 
-The standalone target now persists real configuration drafts: schedules with IANA timezones and non-overlapping weekly windows, throttle and jitter, ordered steps, and provider-neutral subject/body variants. Database commands lock the campaign-scoped rows and validate full ordering before reordering or activation. An active state means only that the configuration is complete; it does not create enrollment or dispatch work. The UI therefore shows **Automation not configured** rather than send, enrollment, or delivery metrics. Routing, the enrollment state machine, scheduler/queue, provider adapter, and all delivery behavior remain the blocker work described below.
+The standalone target now persists real configuration drafts: schedules with IANA timezones and non-overlapping weekly windows, future jitter, and provider-neutral subject/body variants directly owned by the sequence. Configured campaign mailboxes and their policies are the future delivery-capacity authority; there is no sequence-wide throttle. Database commands lock the campaign-scoped schedule and variants before activation. An active state means only that the configuration is complete; it does not create enrollment or dispatch work. The UI therefore shows **Automation not configured** rather than send, enrollment, or delivery metrics. Routing, the enrollment state machine, scheduler/queue, provider adapter, and all delivery behavior remain the blocker work described below.
 
 | ID | Severity | Gap / evidence | Impact on target | Required target decision or implementation |
 | --- | --- | --- | --- | --- |

@@ -5,7 +5,7 @@
 1. Phase 1 established the standalone workspace, membership, CRM, audit, RLS, and owner/admin command boundary.
 2. Phases 2–4 added contact lifecycle commands, company/contact relationships, and disabled-by-default durable imports.
 3. Phase 5 added externally provisioned mailbox records, audited policy controls, health observations, dormant atomic capacity reservation primitives, and the one-workspace/one-campaign boundary. That campaign owns its mailboxes, send policies, sequences, schedules, variants, and enrollments.
-5. Phase 6 replaces the Sequences prototype with campaign-owned draft configuration: IANA timezones, non-overlapping weekly time windows, throttle and jitter policies, ordered steps, and provider-neutral subject/body variants. Managers can activate only a transactionally complete configuration, pause it for editing, or archive it.
+4. Phase 6 replaces the Sequences prototype with campaign-owned draft configuration: IANA timezones, non-overlapping weekly time windows, future jitter, and provider-neutral subject/body variants directly owned by each sequence. Configured campaign mailboxes, not a sequence-wide throttle, will own future delivery capacity. Managers can activate only a transactionally complete configuration, pause it for editing, or archive it.
 
 ## Phase 5 campaign invariant
 
@@ -20,15 +20,17 @@
 
 An **active** sequence means its configuration passes validation; it does not mean that work can run. Automation is not configured: there is no enrollment state machine, route selection, provider adapter, scheduler, queue, worker, webhook, or send attempt in this phase. The legacy authenticated enrollment RPC is revoked so a configuration state cannot be mistaken for a runnable lead state.
 
-The next outreach phase may add an explicit enrollment state machine, durable routing and then scheduling/dispatch. It must preserve the Phase 5 scope checks, choose only from the resolved campaign mailbox pool, store campaign traceability on routes, attempts, conversations, and metrics directly or through protected parents, and define idempotency, provider, retry, cancellation, DNC/reply/bounce, capacity, throttle, jitter, and auditing behavior before any sends are enabled.
+The next outreach phase may add an explicit enrollment state machine, durable routing and then scheduling/dispatch. It must preserve the Phase 5 scope checks, choose only from the resolved campaign mailbox pool, store campaign traceability on routes, attempts, conversations, and metrics directly or through protected parents, and define idempotency, provider, retry, cancellation, DNC/reply/bounce, per-mailbox capacity, jitter, and auditing behavior before any sends are enabled.
 
 ## Deployment checklist for Phase 6
 
-1. Apply the six fresh/reset baseline migrations through `20260903000600_phase_6_sequence_configuration_drafts.sql` using the privileged migration role.
-2. Verify `campaign_sequence_schedules_sequence_key` and the deferrable `campaign_sequence_steps_position_key` exist before deployment.
-3. Deploy the application and confirm that an owner/admin can configure a draft, that invalid overlap/order/activation cases fail, and that a member can only review configuration.
+1. Apply every migration in filename order through `20260909000200_phase_6_remove_sequence_throttle.sql` using the privileged migration role.
+2. Verify `campaign_sequence_schedules_sequence_key` and `campaign_sequence_variants_key_per_sequence` exist, and that `campaign_sequence_schedules.throttle_max_sends_per_hour` no longer exists, before deployment.
+3. Deploy the application and confirm that an owner/admin can configure a draft, that invalid overlap/incomplete-variant activation cases fail, and that a member can only review configuration.
 4. Confirm the Sequences screen visibly reports **Automation not configured** for every state. Do not grant the revoked enrollment commands back, wire a provider, or deploy a scheduler as part of this release.
 5. No new environment variables are required. Continue to keep `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` browser-safe, and keep `SUPABASE_SERVICE_ROLE_KEY` server-only for future worker work.
+
+The direct-variant migration preserves schedules, lifecycle state, dormant enrollments, and all saved templates. It intentionally removes former step positions and delay values; duplicate former step-local variant keys are renamed to unique `migrated-N` keys within their sequence. The following throttle-removal migration preserves schedule timezone/window and jitter settings, and makes configured campaign mailboxes the future capacity authority.
 
 ## Exact future multi-campaign migration path
 
