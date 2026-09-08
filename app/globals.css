@@ -63,3 +63,47 @@ dialog::backdrop {
   background: rgb(19 33 45 / 42%);
   backdrop-filter: blur(2px);
 }
+
+@keyframes route-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes route-loading-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.68);
+  }
+}
+
+@keyframes route-loading-shimmer {
+  0%,
+  100% {
+    opacity: 0.54;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.route-loading-ring {
+  animation: route-loading-spin 0.9s linear infinite;
+}
+
+.route-loading-core {
+  animation: route-loading-pulse 1.1s ease-in-out infinite;
+}
+
+.route-loading-shimmer {
+  animation: route-loading-shimmer 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-loading-ring,
+  .route-loading-core,
+  .route-loading-shimmer {
+    animation: none;
+  }
+}
