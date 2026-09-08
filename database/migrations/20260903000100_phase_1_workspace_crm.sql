@@ -117,7 +117,7 @@ create table public.lead_phone_numbers (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces (id) on delete restrict,
   lead_id uuid not null,
-  e164_phone_number text not null check (e164_phone_number ~ '^\\+[1-9][0-9]{1,14}$'),
+  e164_phone_number text not null check (e164_phone_number ~ '^\+[1-9][0-9]{1,14}$'),
   label text not null default 'work' check (btrim(label) <> ''),
   is_primary boolean not null default false,
   created_at timestamptz not null default now(),

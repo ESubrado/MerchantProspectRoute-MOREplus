@@ -398,6 +398,7 @@ function saveErrorMessage(code: string | undefined) {
 }
 
 function contactCommandError(code: string | undefined) {
+  if (code === "PGRST202" || code === "42883") return "Contact-method updates are not installed in this database. Apply the latest database migration, then try again.";
   if (code === "22023") return "Check the contact method or reply state, then try again.";
   if (code === "23503") return "Choose an active workspace member for this assignment.";
   if (code === "23505") return "This contact method is already recorded.";
