@@ -64,6 +64,132 @@ dialog::backdrop {
   backdrop-filter: blur(2px);
 }
 
+dialog[open]::backdrop {
+  animation: drawer-backdrop-enter 160ms ease-out both;
+}
+
+@keyframes drawer-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawer-backdrop-exit {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes drawer-panel-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+}
+
+@keyframes sequence-variants-enter {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sequence-variants-exit {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+}
+
+@keyframes variant-editor-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-0.375rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.drawer-panel-enter {
+  animation: drawer-panel-enter 220ms ease-out both;
+}
+
+.drawer-panel-exit {
+  animation: drawer-panel-exit 180ms ease-in both;
+}
+
+.sequence-variants-enter {
+  display: grid;
+  overflow: hidden;
+  animation: sequence-variants-enter 180ms ease-out both;
+}
+
+.sequence-variants-exit {
+  display: grid;
+  overflow: hidden;
+  animation: sequence-variants-exit 160ms ease-in both;
+}
+
+.sequence-variants-motion-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.variant-editor-enter {
+  animation: variant-editor-enter 180ms ease-out both;
+}
+
+.variant-editor-motion-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+dialog[data-closing="true"][open]::backdrop {
+  animation: drawer-backdrop-exit 180ms ease-in both;
+}
+
 @keyframes route-loading-spin {
   to {
     transform: rotate(360deg);
@@ -103,7 +229,14 @@ dialog::backdrop {
 @media (prefers-reduced-motion: reduce) {
   .route-loading-ring,
   .route-loading-core,
-  .route-loading-shimmer {
+  .route-loading-shimmer,
+  .drawer-panel-enter,
+  .drawer-panel-exit,
+  .sequence-variants-enter,
+  .sequence-variants-exit,
+  .variant-editor-enter,
+  dialog[data-closing="true"][open]::backdrop,
+  dialog[open]::backdrop {
     animation: none;
   }
 }

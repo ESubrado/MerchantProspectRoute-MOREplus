@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 
 import {
+  archiveCampaignSequence,
   createCampaignSequence,
+  deleteCampaignSequence,
   deleteCampaignSequenceVariant,
   saveCampaignSequenceVariant,
-  setCampaignSequenceStatus,
+  setCampaignLifecycleStatus,
   updateCampaignSequenceConfiguration,
-  type CampaignSequenceStatus,
   type SequenceConfigurationInput,
   type SequenceScheduleWindow,
 } from "@/lib/sequences/sequences";
@@ -21,7 +22,6 @@ export type SequenceActionState = {
 const actionPath = "/outreach/sequences";
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const variantKeyPattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 
 /** Uses the runtime's IANA database to reject invalid browser-supplied timezone names. */
 function validIanaTimezone(value: string) {
@@ -63,12 +63,10 @@ function windowsOverlap(windows: SequenceScheduleWindow[]) {
 
 /** Performs client-facing validation before the transaction repeats it against the campaign-owned schedule. */
 function sequenceConfigurationInput(formData: FormData): { input: SequenceConfigurationInput } | { message: string } {
-  const name = String(formData.get("name") ?? "").trim();
   const scheduleTimezone = String(formData.get("scheduleTimezone") ?? "").trim();
   const jitterMaxMinutes = wholeNumber(String(formData.get("jitterMaxMinutes") ?? ""));
   const rawWindows = String(formData.get("weeklyWindows") ?? "");
 
-  if (!name || name.length > 160) return { message: "Enter a sequence name of up to 160 characters." };
   if (!scheduleTimezone || scheduleTimezone.length > 100 || !validIanaTimezone(scheduleTimezone)) {
     return { message: "Use a valid IANA schedule timezone, for example America/New_York or Asia/Singapore." };
   }
@@ -101,7 +99,7 @@ function sequenceConfigurationInput(formData: FormData): { input: SequenceConfig
   }
   if (windowsOverlap(weeklyWindows)) return { message: "Weekly windows cannot overlap on the same weekday." };
 
-  return { input: { jitterMaxMinutes, name, scheduleTimezone, weeklyWindows } };
+  return { input: { jitterMaxMinutes, scheduleTimezone, weeklyWindows } };
 }
 
 /** Converts a domain command result into UI state and invalidates the sequence route after a successful mutation. */
@@ -112,16 +110,14 @@ function stateFromResult(result: { message?: string; type: "error" | "success" }
   return { message: successMessage, status: "success" };
 }
 
-/** Creates an inert empty draft; schedule and template completeness are validated only when a manager activates it. */
+/** Creates the next inert Step N draft; schedule and template completeness are validated only when a manager activates it. */
 export async function createSequenceAction(_previousState: SequenceActionState, formData: FormData): Promise<SequenceActionState> {
-  const name = String(formData.get("name") ?? "").trim();
   const scheduleTimezone = String(formData.get("scheduleTimezone") ?? "").trim();
-  if (!name || name.length > 160) return { message: "Enter a sequence name of up to 160 characters.", status: "error" };
   if (!scheduleTimezone || scheduleTimezone.length > 100 || !validIanaTimezone(scheduleTimezone)) {
     return { message: "Use a valid IANA schedule timezone, for example America/New_York or Asia/Singapore.", status: "error" };
   }
 
-  return stateFromResult(await createCampaignSequence({ name, scheduleTimezone }), "Draft sequence created. Add schedule windows and a complete template variant before activation.");
+  return stateFromResult(await createCampaignSequence({ scheduleTimezone }), "New step created. Add schedule windows and a complete template variant before activation.");
 }
 
 /** Saves schedule windows, timezone, and jitter for an editable sequence. */
@@ -138,15 +134,13 @@ export async function saveSequenceConfigurationAction(_previousState: SequenceAc
 export async function saveSequenceVariantAction(_previousState: SequenceActionState, formData: FormData): Promise<SequenceActionState> {
   const id = sequenceId(formData);
   const currentVariantId = variantId(formData);
-  const variantKey = String(formData.get("variantKey") ?? "").trim().toLowerCase();
   const subject = String(formData.get("subject") ?? "").trim();
   const body = String(formData.get("body") ?? "");
   if (!id || currentVariantId === "invalid") return { message: "This sequence template reference is invalid. Refresh the page and try again.", status: "error" };
-  if (!variantKeyPattern.test(variantKey)) return { message: "Variant keys use 1 to 32 lowercase letters, numbers, underscores, or hyphens.", status: "error" };
   if (!subject || subject.length > 250) return { message: "Template subject must be between 1 and 250 characters.", status: "error" };
   if (!body.trim() || body.length > 20000) return { message: "Template body must be between 1 and 20,000 characters.", status: "error" };
 
-  return stateFromResult(await saveCampaignSequenceVariant(id, currentVariantId, { body, subject, variantKey }), "Template variant saved. It is stored only and will not send.");
+  return stateFromResult(await saveCampaignSequenceVariant(id, currentVariantId, { body, subject }), "Template variant saved. It is stored only and will not send.");
 }
 
 /** Removes a template variant; activation remains blocked if none complete variants remain. */
@@ -158,17 +152,31 @@ export async function deleteSequenceVariantAction(_previousState: SequenceAction
   return stateFromResult(await deleteCampaignSequenceVariant(id, currentVariantId), "Template variant deleted.");
 }
 
-/** Applies a lifecycle transition; activation validates configuration but never enables dispatch. */
-export async function setSequenceStatusAction(_previousState: SequenceActionState, formData: FormData): Promise<SequenceActionState> {
+/** Removes an editable Step N record while the database preserves enrollment history and compacts later generated labels. */
+export async function deleteSequenceAction(_previousState: SequenceActionState, formData: FormData): Promise<SequenceActionState> {
   const id = sequenceId(formData);
+  if (!id) return { message: "This step reference is invalid. Refresh the page and try again.", status: "error" };
+
+  return stateFromResult(await deleteCampaignSequence(id), "Step removed. Remaining generated step labels have been renumbered.");
+}
+
+/** Launches, pauses, or resumes every non-archived step; activation validates each step but never enables dispatch. */
+export async function setCampaignStatusAction(_previousState: SequenceActionState, formData: FormData): Promise<SequenceActionState> {
   const status = String(formData.get("status") ?? "").trim();
-  if (!id) return { message: "This sequence reference is invalid. Refresh the page and try again.", status: "error" };
-  if (status !== "draft" && status !== "active" && status !== "paused" && status !== "archived") {
-    return { message: "Choose a valid sequence state.", status: "error" };
+  if (status !== "active" && status !== "paused") {
+    return { message: "Choose a valid campaign action.", status: "error" };
   }
 
   const successMessage = status === "active"
-    ? "Configuration activated. Automation is not configured, so no contacts will be enrolled or sent."
-    : `Sequence state changed to ${status}.`;
-  return stateFromResult(await setCampaignSequenceStatus(id, status as CampaignSequenceStatus), successMessage);
+    ? "Campaign is active. Every non-archived step was validated; automation is not configured, so no contacts will be enrolled or sent."
+    : "Campaign paused. Every active step can now be edited or removed.";
+  return stateFromResult(await setCampaignLifecycleStatus(status), successMessage);
+}
+
+/** Archives one step without changing the lifecycle of other campaign steps. */
+export async function archiveSequenceAction(_previousState: SequenceActionState, formData: FormData): Promise<SequenceActionState> {
+  const id = sequenceId(formData);
+  if (!id) return { message: "This step reference is invalid. Refresh the page and try again.", status: "error" };
+
+  return stateFromResult(await archiveCampaignSequence(id), "Step archived. It is retained as a read-only configuration record.");
 }

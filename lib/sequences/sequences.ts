@@ -1,4 +1,4 @@
-import { isWorkspaceManagerRole, type WorkspaceRole } from "@/lib/auth/roles";
+import { isWorkspaceManagerRole } from "@/lib/auth/roles";
 import { getAuthorizedWorkspaceCampaignAccess } from "@/lib/auth/session";
 import { getSupabaseConfiguration } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
@@ -31,7 +31,6 @@ export type CampaignSequenceListItem = {
 
 export type SequenceConfigurationInput = {
   jitterMaxMinutes: number;
-  name: string;
   scheduleTimezone: string;
   weeklyWindows: SequenceScheduleWindow[];
 };
@@ -39,7 +38,6 @@ export type SequenceConfigurationInput = {
 export type SequenceVariantInput = {
   body: string;
   subject: string;
-  variantKey: string;
 };
 
 export type SequencesPageResult =
@@ -48,7 +46,6 @@ export type SequencesPageResult =
     canManageSequences: boolean;
     sequences: CampaignSequenceListItem[];
     type: "success";
-    workspaceRole: WorkspaceRole;
   }
   | { message: string; type: "error" };
 
@@ -155,18 +152,16 @@ export async function getSequencesPage(): Promise<SequencesPageResult> {
     canManageSequences: isWorkspaceManagerRole(workspaceAccess.role),
     sequences: (data ?? []).map(sequenceFromRow).filter((sequence: CampaignSequenceListItem | null): sequence is CampaignSequenceListItem => sequence !== null),
     type: "success",
-    workspaceRole: workspaceAccess.role,
   };
 }
 
-/** Creates an editable draft under the only campaign that belongs to the signed-in workspace. */
-export async function createCampaignSequence(input: { name: string; scheduleTimezone: string }): Promise<CommandResult> {
+/** Creates the next database-numbered Step N draft under the signed-in workspace's only campaign. */
+export async function createCampaignSequence(input: { scheduleTimezone: string }): Promise<CommandResult> {
   const workspaceAccess = await managerWorkspaceAccess();
   if (!workspaceAccess) return managerAccessError();
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("campaign_sequence_create", {
-    p_name: input.name,
     p_schedule_timezone: input.scheduleTimezone,
     p_workspace_id: workspaceAccess.workspaceId,
   });
@@ -174,7 +169,7 @@ export async function createCampaignSequence(input: { name: string; scheduleTime
   return error ? commandError(error) : { type: "success" };
 }
 
-/** Stores the schedule policy and metadata in one database transaction. */
+/** Stores a database-numbered step's schedule and timing metadata in one database transaction. */
 export async function updateCampaignSequenceConfiguration(sequenceId: string, input: SequenceConfigurationInput): Promise<CommandResult> {
   const workspaceAccess = await managerWorkspaceAccess();
   if (!workspaceAccess) return managerAccessError();
@@ -182,7 +177,6 @@ export async function updateCampaignSequenceConfiguration(sequenceId: string, in
   const supabase = await createClient();
   const { error } = await supabase.rpc("campaign_sequence_update_configuration", {
     p_jitter_max_minutes: input.jitterMaxMinutes,
-    p_name: input.name,
     p_schedule_timezone: input.scheduleTimezone,
     p_sequence_id: sequenceId,
     p_weekly_windows: input.weeklyWindows.map((window) => ({
@@ -196,13 +190,12 @@ export async function updateCampaignSequenceConfiguration(sequenceId: string, in
   return error ? commandError(error) : { type: "success" };
 }
 
-/** Creates a new direct variant when no ID is supplied, otherwise updates the owned variant atomically. */
+/** Creates a new database-labeled direct variant when no ID is supplied, otherwise updates the owned variant atomically. */
 export async function saveCampaignSequenceVariant(sequenceId: string, variantId: string | null, input: SequenceVariantInput): Promise<CommandResult> {
   return runSequenceCommand("campaign_sequence_save_variant", sequenceId, {
     p_body: input.body,
     p_subject: input.subject,
     p_variant_id: variantId,
-    p_variant_key: input.variantKey,
   });
 }
 
@@ -211,9 +204,28 @@ export async function deleteCampaignSequenceVariant(sequenceId: string, variantI
   return runSequenceCommand("campaign_sequence_delete_variant", sequenceId, { p_variant_id: variantId });
 }
 
-/** Activating validates a complete configuration; it remains an inert state until automation exists in a later phase. */
-export async function setCampaignSequenceStatus(sequenceId: string, status: CampaignSequenceStatus): Promise<CommandResult> {
-  return runSequenceCommand("campaign_sequence_set_status", sequenceId, { p_status: status });
+/** Removes one editable Step N configuration after the database protects history and compacts remaining generated labels. */
+export async function deleteCampaignSequence(sequenceId: string): Promise<CommandResult> {
+  return runSequenceCommand("campaign_sequence_delete", sequenceId, {});
+}
+
+/** Launches, pauses, or resumes every non-archived campaign step in one database transaction. */
+export async function setCampaignLifecycleStatus(status: "active" | "paused"): Promise<CommandResult> {
+  const workspaceAccess = await managerWorkspaceAccess();
+  if (!workspaceAccess) return managerAccessError();
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("campaign_sequence_set_campaign_status", {
+    p_status: status,
+    p_workspace_id: workspaceAccess.workspaceId,
+  });
+
+  return error ? commandError(error) : { type: "success" };
+}
+
+/** Archives one record; launch, pause, and resume must use the campaign-wide lifecycle command. */
+export async function archiveCampaignSequence(sequenceId: string): Promise<CommandResult> {
+  return runSequenceCommand("campaign_sequence_set_status", sequenceId, { p_status: "archived" });
 }
 
 /** Resolves the manager's workspace before invoking an RPC; no command accepts a campaign ID from the browser. */
@@ -244,14 +256,20 @@ function managerAccessError(): CommandResult {
 
 /** Maps database error classes to actionable, operation-aware, and non-sensitive configuration feedback. */
 function commandError(error: RpcError): CommandResult {
-  if (error.code === "22023") return { message: "Check the sequence name, schedule, template, and jitter values, then try again.", type: "error" };
-  if (error.code === "23505") return { message: "A sequence name or template variant key is already in use in this campaign.", type: "error" };
+  if (error.code === "22023") return { message: "Check the schedule, template, and jitter values, then try again.", type: "error" };
+  if (error.code === "23505") return { message: "A template variant key is already in use in this campaign.", type: "error" };
   if (error.code === "P0002") return { message: "This sequence configuration is no longer available. Refresh the page and try again.", type: "error" };
   if (error.code === "42501") return { message: "Your workspace permissions changed. Sign in again and try once more.", type: "error" };
   if (error.code === "55000") return {
-    message: error.message?.includes("Activation requires")
-      ? "Activation requires a weekly window and at least one complete template variant."
-      : "Pause the sequence before editing it. Archived sequences cannot be changed, and state transitions must follow the configured lifecycle.",
+    message: error.message?.includes("Campaign is active")
+      ? "Pause the active campaign before adding a step."
+      : error.message?.includes("Campaign is not active")
+        ? "This campaign is already paused. Refresh the page and try again."
+      : error.message?.includes("enrollment history")
+        ? "This step has enrollment history and cannot be removed."
+      : error.message?.includes("Activation requires")
+        ? "Campaign launch requires every non-archived step to have a weekly window and at least one complete subject/body template variant."
+        : "Pause the sequence before editing it. Archived sequences cannot be changed, and state transitions must follow the configured lifecycle.",
     type: "error",
   };
   return { message: "The sequence configuration could not be saved. Try again shortly.", type: "error" };
