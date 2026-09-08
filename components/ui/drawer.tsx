@@ -8,15 +8,17 @@ import { Button } from "@/components/ui/button";
 
 type DrawerProps = {
   children: ReactNode;
+  closing?: boolean;
   description?: string;
   onClose: () => void;
+  onCloseComplete?: () => void;
   open: boolean;
   size?: "default" | "wide";
   title: string;
 };
 
 /** Renders a responsive right-side panel; wide mode supports dense workspace editors without affecting standard drawers. */
-export function Drawer({ children, description, onClose, open, size = "default", title }: DrawerProps) {
+export function Drawer({ children, closing = false, description, onClose, onCloseComplete, open, size = "default", title }: DrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -34,6 +36,7 @@ export function Drawer({ children, description, onClose, open, size = "default",
       aria-describedby={description ? descriptionId : undefined}
       aria-labelledby={titleId}
       className={`m-0 ml-auto h-dvh w-full ${size === "wide" ? "max-w-6xl" : "max-w-xl"} border-0 bg-transparent p-0 backdrop:bg-transparent`}
+      data-closing={closing ? "true" : undefined}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -43,7 +46,14 @@ export function Drawer({ children, description, onClose, open, size = "default",
       }}
       ref={dialogRef}
     >
-      <div className="flex h-full flex-col border-l border-[var(--line)] bg-[var(--surface)] shadow-[-18px_0_45px_rgb(19_33_45/0.14)]">
+      <div
+        className={`${closing ? "drawer-panel-exit pointer-events-none" : "drawer-panel-enter"} flex h-full flex-col border-l border-[var(--line)] bg-[var(--surface)] shadow-[-18px_0_45px_rgb(19_33_45/0.14)]`}
+        onAnimationEnd={(event) => {
+          if (!closing || event.target !== event.currentTarget) return;
+          dialogRef.current?.close();
+          onCloseComplete?.();
+        }}
+      >
         <div className={`flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-5 ${size === "wide" ? "sm:px-8" : "sm:px-6"}`}>
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-[var(--ink)]" id={titleId}>{title}</h2>

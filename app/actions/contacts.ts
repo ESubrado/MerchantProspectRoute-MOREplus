@@ -15,11 +15,13 @@ import {
   setContactAssignment,
   setContactFollowing,
   setContactReplyState,
+  type ContactDetail,
   type ContactWriteInput,
   updateWorkspaceContact,
 } from "@/lib/crm/contacts";
 
 export type ContactActionState = {
+  detail?: ContactDetail;
   message: string;
   status: "error" | "idle" | "success";
 };
@@ -118,6 +120,18 @@ function revalidateContactRoutes() {
   revalidatePath("/companies");
 }
 
+/** Returns the newly persisted detail with a successful contact-method command so the drawer can update immediately. */
+async function methodCommandSuccess(contactId: string, message: string): Promise<ContactActionState> {
+  revalidateContactRoutes();
+  const detailResult = await getContactDetail(contactId);
+
+  return {
+    detail: detailResult.type === "success" ? detailResult.detail : undefined,
+    message,
+    status: "success",
+  };
+}
+
 /** Reauthorizes and returns the client drawer's narrow detail DTO. */
 export async function getContactDetailAction(contactId: string) {
   if (!uuidPattern.test(contactId)) return { message: "This contact reference is invalid.", type: "error" as const };
@@ -138,8 +152,7 @@ export async function addContactEmailAction(_previousState: ContactActionState, 
   if (!label || label.length > 40) return commandFailure("Email label must contain between 1 and 40 characters.");
   const result = await addContactEmail(contactId, { email, isPrimary: formData.get("isPrimary") === "on", label });
   if (result.type === "error") return commandFailure(result.message ?? "The email could not be added.");
-  revalidateContactRoutes();
-  return { message: "Email saved.", status: "success" };
+  return methodCommandSuccess(contactId, "Email saved.");
 }
 
 export async function removeContactEmailAction(_previousState: ContactActionState, formData: FormData): Promise<ContactActionState> {
@@ -148,8 +161,7 @@ export async function removeContactEmailAction(_previousState: ContactActionStat
   if (!contactId || !methodId) return commandFailure("This email reference is invalid. Refresh and try again.");
   const result = await removeContactEmail(contactId, methodId);
   if (result.type === "error") return commandFailure(result.message ?? "The email could not be removed.");
-  revalidateContactRoutes();
-  return { message: "Email removed.", status: "success" };
+  return methodCommandSuccess(contactId, "Email removed.");
 }
 
 export async function addContactPhoneAction(_previousState: ContactActionState, formData: FormData): Promise<ContactActionState> {
@@ -161,8 +173,7 @@ export async function addContactPhoneAction(_previousState: ContactActionState, 
   if (!label || label.length > 40) return commandFailure("Phone label must contain between 1 and 40 characters.");
   const result = await addContactPhone(contactId, { isPrimary: formData.get("isPrimary") === "on", label, phoneNumber });
   if (result.type === "error") return commandFailure(result.message ?? "The phone number could not be added.");
-  revalidateContactRoutes();
-  return { message: "Phone number saved.", status: "success" };
+  return methodCommandSuccess(contactId, "Phone number saved.");
 }
 
 export async function removeContactPhoneAction(_previousState: ContactActionState, formData: FormData): Promise<ContactActionState> {
@@ -171,8 +182,7 @@ export async function removeContactPhoneAction(_previousState: ContactActionStat
   if (!contactId || !methodId) return commandFailure("This phone reference is invalid. Refresh and try again.");
   const result = await removeContactPhone(contactId, methodId);
   if (result.type === "error") return commandFailure(result.message ?? "The phone number could not be removed.");
-  revalidateContactRoutes();
-  return { message: "Phone number removed.", status: "success" };
+  return methodCommandSuccess(contactId, "Phone number removed.");
 }
 
 export async function addContactSocialProfileAction(_previousState: ContactActionState, formData: FormData): Promise<ContactActionState> {
@@ -184,8 +194,7 @@ export async function addContactSocialProfileAction(_previousState: ContactActio
   if (!/^https?:\/\/[^\s]+$/i.test(profileUrl) || profileUrl.length > 500) return commandFailure("Enter a valid http or https social profile URL.");
   const result = await addContactSocialProfile(contactId, { platform, profileUrl });
   if (result.type === "error") return commandFailure(result.message ?? "The social profile could not be added.");
-  revalidateContactRoutes();
-  return { message: "Social profile saved.", status: "success" };
+  return methodCommandSuccess(contactId, "Social profile saved.");
 }
 
 export async function removeContactSocialProfileAction(_previousState: ContactActionState, formData: FormData): Promise<ContactActionState> {
@@ -194,8 +203,7 @@ export async function removeContactSocialProfileAction(_previousState: ContactAc
   if (!contactId || !methodId) return commandFailure("This social profile reference is invalid. Refresh and try again.");
   const result = await removeContactSocialProfile(contactId, methodId);
   if (result.type === "error") return commandFailure(result.message ?? "The social profile could not be removed.");
-  revalidateContactRoutes();
-  return { message: "Social profile removed.", status: "success" };
+  return methodCommandSuccess(contactId, "Social profile removed.");
 }
 
 export async function setContactAssignmentAction(_previousState: ContactActionState, formData: FormData): Promise<ContactActionState> {

@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useState } from "react";
+import { startTransition, useActionState, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import {
@@ -190,9 +190,9 @@ function ContactForm({
 }
 
 /** Compact nested command form for a single tenant-authorized contact mutation. */
-function ContactCommandForm({ action, children, onSuccess, submitLabel }: { action: ContactAction; children: React.ReactNode; onSuccess: () => void; submitLabel: string }) {
+function ContactCommandForm({ action, children, onSuccess, submitLabel }: { action: ContactAction; children: React.ReactNode; onSuccess: (detail?: ContactDetail) => void; submitLabel: string }) {
   const [state, formAction, pending] = useActionState(action, actionInitialState);
-  useEffect(() => { if (state.status === "success") onSuccess(); }, [onSuccess, state.status]);
+  useEffect(() => { if (state.status === "success") onSuccess(state.detail); }, [onSuccess, state.detail, state.status]);
   return <form action={formAction} className="grid gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-subtle)] p-3">{children}{state.status !== "idle" ? <p aria-live="polite" className={state.status === "error" ? "text-sm text-[var(--danger)]" : "text-sm text-[var(--success)]"}>{state.message}</p> : null}<div className="flex justify-end"><Button disabled={pending} size="sm" type="submit" variant="secondary">{pending ? "Saving…" : submitLabel}</Button></div></form>;
 }
 
@@ -200,7 +200,7 @@ function shortMemberId(userId: string) {
   return `${userId.slice(0, 8)}…`;
 }
 
-function ContactMethods({ canManageContacts, detail, onChanged }: { canManageContacts: boolean; detail: ContactDetail; onChanged: () => void }) {
+function ContactMethods({ canManageContacts, detail, onChanged }: { canManageContacts: boolean; detail: ContactDetail; onChanged: (detail?: ContactDetail) => void }) {
   return <section className="space-y-4 border-t border-[var(--line)] pt-6"><div><p className="text-xs font-bold tracking-wide text-[var(--teal)] uppercase">Contact methods</p><h3 className="mt-1 text-base font-semibold text-[var(--ink)]">Email, phone, and social profiles</h3></div><div className="grid gap-4"><MethodList empty="No email methods" items={detail.emailMethods.map((method) => <div className="flex items-center justify-between gap-3" key={method.id}><span><span className="block font-medium text-[var(--ink)]">{method.email}{method.isPrimary ? " · primary" : ""}</span><span className="text-xs text-[var(--ink-muted)]">{method.label}{method.doNotContact ? " · method DNC" : ""}</span></span>{canManageContacts ? <ContactCommandForm action={removeContactEmailAction} onSuccess={onChanged} submitLabel="Remove"><input name="contactId" type="hidden" value={detail.id} /><input name="methodId" type="hidden" value={method.id} /></ContactCommandForm> : null}</div>)} title="Email" />{canManageContacts ? <ContactCommandForm action={addContactEmailAction} onSuccess={onChanged} submitLabel="Add email"><input name="contactId" type="hidden" value={detail.id} /><div className="grid gap-3 sm:grid-cols-2"><Field label="Email"><Input maxLength={320} name="email" required type="email" /></Field><Field label="Label"><Input defaultValue="work" maxLength={40} name="label" required /></Field></div><label className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]"><input name="isPrimary" type="checkbox" />Make primary</label></ContactCommandForm> : null}<MethodList empty="No phone methods" items={detail.phoneMethods.map((method) => <div className="flex items-center justify-between gap-3" key={method.id}><span><span className="block font-medium text-[var(--ink)]">{method.phoneNumber}{method.isPrimary ? " · primary" : ""}</span><span className="text-xs text-[var(--ink-muted)]">{method.label}</span></span>{canManageContacts ? <ContactCommandForm action={removeContactPhoneAction} onSuccess={onChanged} submitLabel="Remove"><input name="contactId" type="hidden" value={detail.id} /><input name="methodId" type="hidden" value={method.id} /></ContactCommandForm> : null}</div>)} title="Phone" />{canManageContacts ? <ContactCommandForm action={addContactPhoneAction} onSuccess={onChanged} submitLabel="Add phone"><input name="contactId" type="hidden" value={detail.id} /><div className="grid gap-3 sm:grid-cols-2"><Field label="E.164 number"><Input maxLength={16} name="phoneNumber" placeholder="+14155552671" required type="tel" /></Field><Field label="Label"><Input defaultValue="work" maxLength={40} name="label" required /></Field></div><label className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]"><input name="isPrimary" type="checkbox" />Make primary</label></ContactCommandForm> : null}<MethodList empty="No social profiles" items={detail.socialProfiles.map((profile) => <div className="flex items-center justify-between gap-3" key={profile.id}><span><span className="block font-medium text-[var(--ink)]">{profile.platform}</span><a className="text-xs text-[var(--primary)] hover:underline" href={profile.profileUrl} rel="noreferrer" target="_blank">{profile.profileUrl}</a></span>{canManageContacts ? <ContactCommandForm action={removeContactSocialProfileAction} onSuccess={onChanged} submitLabel="Remove"><input name="contactId" type="hidden" value={detail.id} /><input name="methodId" type="hidden" value={profile.id} /></ContactCommandForm> : null}</div>)} title="Social" />{canManageContacts ? <ContactCommandForm action={addContactSocialProfileAction} onSuccess={onChanged} submitLabel="Add social profile"><input name="contactId" type="hidden" value={detail.id} /><div className="grid gap-3 sm:grid-cols-2"><Field label="Platform"><Input maxLength={40} name="platform" placeholder="LinkedIn" required /></Field><Field label="Profile URL"><Input maxLength={500} name="profileUrl" required type="url" /></Field></div></ContactCommandForm> : null}</div></section>;
 }
 
@@ -212,10 +212,20 @@ function ContactCrmDetail({ canManageContacts, contact }: { canManageContacts: b
   const [detail, setDetail] = useState<ContactDetail | null>(null);
   const [members, setMembers] = useState<WorkspaceMemberOption[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [replyTemperatureValue, setReplyTemperatureValue] = useState("");
+  const [emailDnc, setEmailDnc] = useState(false);
   const [revision, setRevision] = useState(0);
   const [followingPending, setFollowingPending] = useState(false);
   const [followingMessage, setFollowingMessage] = useState<string | null>(null);
-  const refresh = () => setRevision((value) => value + 1);
+  const applyDetail = useCallback((nextDetail: ContactDetail) => {
+    setDetail(nextDetail);
+    setReplyTemperatureValue(nextDetail.replyTemperature === null ? "" : String(nextDetail.replyTemperature));
+    setEmailDnc(nextDetail.emailDnc);
+  }, []);
+  const refresh = useCallback((nextDetail?: ContactDetail) => {
+    if (nextDetail) applyDetail(nextDetail);
+    setRevision((value) => value + 1);
+  }, [applyDetail]);
 
   useEffect(() => {
     let mounted = true;
@@ -223,7 +233,7 @@ function ContactCrmDetail({ canManageContacts, contact }: { canManageContacts: b
       void getContactDetailAction(contact.id).then((result) => {
         if (!mounted) return;
         if (result.type === "success" && result.detail) {
-          setDetail(result.detail);
+          applyDetail(result.detail);
           setError(null);
         }
         else setError(result.message ?? "Contact detail could not be loaded.");
@@ -235,7 +245,7 @@ function ContactCrmDetail({ canManageContacts, contact }: { canManageContacts: b
       }
     });
     return () => { mounted = false; };
-  }, [canManageContacts, contact.id, revision]);
+  }, [applyDetail, canManageContacts, contact.id, revision]);
 
   if (error) return <p className="rounded-lg border border-[#ecc7cf] bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">{error}</p>;
   if (!detail) return <p className="rounded-lg border border-[var(--line)] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-[var(--ink-muted)]">Loading contact details…</p>;
@@ -251,7 +261,7 @@ function ContactCrmDetail({ canManageContacts, contact }: { canManageContacts: b
     });
   };
 
-  return <section className="space-y-6 border-t border-[var(--line)] pt-6"><div><p className="text-xs font-bold tracking-wide text-[var(--teal)] uppercase">CRM detail</p><h3 className="mt-1 text-base font-semibold text-[var(--ink)]">Relationships and compliance</h3></div>{canManageContacts ? <div className="grid gap-4"><ContactCommandForm action={setContactReplyStateAction} onSuccess={refresh} submitLabel="Save reply state"><input name="contactId" type="hidden" value={detail.id} /><Field label="Reply classification" hint="Do not contact also stores email DNC as a compliance state."><Select defaultValue={detail.replyTemperature === null ? "" : String(detail.replyTemperature)} name="replyTemperature">{replyTemperatureOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field><label className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]"><input defaultChecked={detail.emailDnc} name="emailDnc" type="checkbox" />Do not contact by email</label></ContactCommandForm><ContactCommandForm action={setContactAssignmentAction} onSuccess={refresh} submitLabel="Save assignment"><input name="contactId" type="hidden" value={detail.id} /><Field label="Current assignee"><Select defaultValue={detail.assigneeUserId ?? ""} name="assigneeUserId"><option value="">Unassigned</option>{members.map((member) => <option key={member.userId} value={member.userId}>{member.role} · {shortMemberId(member.userId)}</option>)}</Select></Field></ContactCommandForm></div> : null}<ContactMethods canManageContacts={canManageContacts} detail={detail} onChanged={refresh} /><section className="space-y-3 border-t border-[var(--line)] pt-6"><div><p className="text-xs font-bold tracking-wide text-[var(--teal)] uppercase">Following</p><h3 className="mt-1 text-base font-semibold text-[var(--ink)]">Workspace followers</h3></div><p className="text-sm text-[var(--ink-muted)]">{detail.followerUserIds.length === 0 ? "No one is following this contact yet." : detail.followerUserIds.map(shortMemberId).join(", ")}</p><Button disabled={followingPending} onClick={setFollowing} variant="secondary">{followingPending ? "Saving…" : detail.isFollowing ? "Stop following" : "Follow contact"}</Button>{followingMessage ? <p aria-live="polite" className="text-sm text-[var(--ink-muted)]">{followingMessage}</p> : null}</section></section>;
+  return <section className="space-y-6 border-t border-[var(--line)] pt-6"><div><p className="text-xs font-bold tracking-wide text-[var(--teal)] uppercase">CRM detail</p><h3 className="mt-1 text-base font-semibold text-[var(--ink)]">Relationships and compliance</h3></div>{canManageContacts ? <div className="grid gap-4"><ContactCommandForm action={setContactReplyStateAction} onSuccess={refresh} submitLabel="Save reply state"><input name="contactId" type="hidden" value={detail.id} /><Field label="Reply classification" hint="Do not contact also stores email DNC as a compliance state."><Select name="replyTemperature" onChange={(event) => setReplyTemperatureValue(event.target.value)} value={replyTemperatureValue}>{replyTemperatureOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field><label className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]"><input checked={emailDnc} name="emailDnc" onChange={(event) => setEmailDnc(event.target.checked)} type="checkbox" />Do not contact by email</label></ContactCommandForm><ContactCommandForm action={setContactAssignmentAction} onSuccess={refresh} submitLabel="Save assignment"><input name="contactId" type="hidden" value={detail.id} /><Field label="Current assignee"><Select defaultValue={detail.assigneeUserId ?? ""} name="assigneeUserId"><option value="">Unassigned</option>{members.map((member) => <option key={member.userId} value={member.userId}>{member.role} · {shortMemberId(member.userId)}</option>)}</Select></Field></ContactCommandForm></div> : null}<ContactMethods canManageContacts={canManageContacts} detail={detail} onChanged={refresh} /><section className="space-y-3 border-t border-[var(--line)] pt-6"><div><p className="text-xs font-bold tracking-wide text-[var(--teal)] uppercase">Following</p><h3 className="mt-1 text-base font-semibold text-[var(--ink)]">Workspace followers</h3></div><p className="text-sm text-[var(--ink-muted)]">{detail.followerUserIds.length === 0 ? "No one is following this contact yet." : detail.followerUserIds.map(shortMemberId).join(", ")}</p><Button disabled={followingPending} onClick={setFollowing} variant="secondary">{followingPending ? "Saving…" : detail.isFollowing ? "Stop following" : "Follow contact"}</Button>{followingMessage ? <p aria-live="polite" className="text-sm text-[var(--ink-muted)]">{followingMessage}</p> : null}</section></section>;
 }
 
 /** Presents editable core details for managers and keeps detail-only CRM relationships available to every member. */

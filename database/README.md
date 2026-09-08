@@ -4,14 +4,19 @@ This folder contains the standalone application's project-owned Supabase/Postgre
 
 ## Phase 1 foundation
 
-The versioned migrations in [`migrations`](./migrations) provide one clean baseline for each of the six phases. Apply them in filename order only to a fresh or reset database; this set intentionally replaces the prior incremental migration history.
+The versioned migrations in [`migrations`](./migrations) provide one clean baseline for the six delivered phases, followed by targeted forward repairs. Apply every file in filename order to a fresh or reset project database. The consolidated final Phase 6 migration is not an upgrade substitute for a database that already applied its superseded local Phase 6 migrations; the targeted variant-RPC repair below bridges only the final deployed database-labeled variant command.
 
 - `20260903000100_phase_1_workspace_crm.sql` defines the workspace CRM schema, ownership roles, tenant integrity, grants, and Row Level Security.
 - `20260903000200_phase_2_contacts.sql` adds tenant-checked Contacts commands, lifecycle fields, and first/last-name writes.
 - `20260903000300_phase_3_crm.sql` adds Companies and the remaining CRM relationship commands.
 - `20260903000400_phase_4_durable_contact_imports.sql` adds disabled-by-default, durable CSV import jobs and private storage.
 - `20260903000500_phase_5_mailbox_and_campaign_domain.sql` adds mailbox policy configuration, capacity primitives, and the one-workspace/one-campaign ownership boundary.
-- `20260903000600_phase_6_sequence_configuration_drafts.sql` adds validated, campaign-scoped sequence drafts with schedules, pacing, ordered steps, and template variants. It includes the final initial-step, cascading step-deletion, and constraint-resolution behavior.
+- `20260903000600_phase_6_sequence_configuration_drafts.sql` adds validated, campaign-scoped sequence drafts with schedules, pacing, ordered steps, and template variants.
+- `20260908000100_repair_contact_detail_methods.sql` applies the Phase 3 contact-detail repair.
+- `20260909000100_phase_6_sequence_direct_variants.sql` simplifies Phase 6 configuration by migrating saved template variants directly to their sequence and removing obsolete ordered-step and delay data.
+- `20260909000200_phase_6_remove_sequence_throttle.sql` removes the unused sequence-wide hourly throttle; future delivery capacity belongs to configured campaign mailboxes and their policies.
+- `20260909000300_phase_6_final_sequence_configuration.sql` is the fresh-install final Phase 6 surface: database-numbered steps and variants, safe label compaction, campaign-wide lifecycle actions, and removal of obsolete RPC arities.
+- `20260909000400_phase_6_variant_rpc_signature_repair.sql` is a forward repair for an already deployed former six-argument database-labeled variant RPC. It adds the five-argument application-call bridge and is a no-op on the fresh-install final surface.
 
 Every CRM table has a `workspace_id`; composite foreign keys prevent a child record from referring to a parent in another workspace. Owners and admins may change shared CRM data, while members can read their active workspace and follow/unfollow themselves. Audit events are readable in the workspace but are append-only and may be written only by trusted server or worker code that bypasses browser RLS.
 
@@ -49,7 +54,7 @@ The same Phase 5 migration creates a project-owned `campaigns` table with a `uni
 
 The migration backfills a campaign for every existing workspace and adds an `after insert` workspace trigger, so the controlled bootstrap transaction automatically creates the sole campaign. The application also invokes an idempotent, membership-authorized campaign resolver before mailbox or sequence access. That resolver can repair only a missing campaign for an already-authorized workspace; it accepts no campaign name and cannot make a second one.
 
-Mailboxes and sending policies now contain the campaign key directly and are enforced by composite foreign keys. A mailbox intentionally has no sequence key: all of a campaign's mailboxes form the one future routing pool. The migration also stores many campaign-owned sequences, schedules, ordered steps, variants, and contact enrollments. A partial unique index on `(workspace_id, lead_id) where status = 'active'` prevents one contact from having concurrent active enrollments in different sequences.
+Mailboxes and sending policies now contain the campaign key directly and are enforced by composite foreign keys. A mailbox intentionally has no sequence key: all of a campaign's mailboxes form the one future routing pool. The migration also stores many campaign-owned sequences, schedules, template variants, and contact enrollments. A partial unique index on `(workspace_id, lead_id) where status = 'active'` prevents one contact from having concurrent active enrollments in different sequences.
 
 The sequence creation flow creates inert drafts and an empty schedule only. Phase 5 does not implement step/variant/schedule-window editing, enrollment UI, a scheduler, routing, sending, a provider, webhooks, or a campaign UI. There are **no new environment variables** for Phase 5.
 
@@ -79,13 +84,21 @@ The first query must return no rows; the latter two must each return one row.
 
 ## Phase 6 sequence configuration drafts
 
-Apply `20260903000600_phase_6_sequence_configuration_drafts.sql` after every earlier migration and before deploying the Phase 6 Sequences UI. It gives every sequence at most one campaign-owned schedule policy, with a validated IANA timezone, up to 42 non-overlapping weekday windows, a future hourly throttle, and a future jitter maximum. It also makes template subjects and bodies first-class stored fields, while retaining the existing provider-neutral JSON snapshot for compatibility. Every newly created sequence receives one zero-delay step. Deleting any non-final step cascades deletion to its owned variants, records the count in the audit event, and closes the remaining positional gap transactionally.
+For a fresh database, apply `20260903000600_phase_6_sequence_configuration_drafts.sql`, `20260909000100_phase_6_sequence_direct_variants.sql`, `20260909000200_phase_6_remove_sequence_throttle.sql`, `20260909000300_phase_6_final_sequence_configuration.sql`, and `20260909000400_phase_6_variant_rpc_signature_repair.sql` after every earlier migration and before deploying the Phase 6 Sequences UI. The repair is a no-op on that fresh final surface. Each sequence has one campaign-owned schedule policy, with a validated IANA timezone, up to 42 non-overlapping weekday windows, and a future jitter maximum. Template subjects and bodies remain first-class stored fields, with the provider-neutral JSON snapshot retained for compatibility. A draft starts empty with the next database-owned `Step N` name; a manager explicitly creates each template variant directly on it.
 
-Owners and admins can edit only drafts or paused sequences. Each configuration command resolves the one campaign from active workspace membership, checks the manager role again in the database, locks its owned sequence, and writes an audit event. Reordering locks the sequence and checks that the supplied list contains every current step exactly once before a deferred unique-position constraint commits the new order. Activating locks the schedule, steps, and variants, then requires at least one weekly window, contiguous positions beginning at 1, and at least one complete subject/body variant on every step. Archived sequences are retained as read-only records.
+Owners and admins can edit only drafts or paused sequences. Each configuration command resolves the one campaign from active workspace membership, checks the manager role again in the database, locks its owned sequence, and writes an audit event. Activating locks the schedule and direct variants, then requires at least one weekly window and one complete subject/body template variant. Archived sequences are retained as read-only records.
 
 An active sequence is still **configuration only**. Phase 6 deploys no routing, enrollment state machine, mailbox selection, provider adapter, scheduler, queue, worker, webhook, rendering, send attempt, or email send path. The earlier authenticated enrollment helpers are revoked so an active configuration cannot be presented as a runnable automation. Do not grant those commands back or connect a provider as part of this release.
 
-There are **no new environment variables** for Phase 6. Apply the migration with the same privileged database role used for earlier migrations, deploy the web application, then verify a manager can save valid schedule/step/variant configuration, invalid overlapping windows and incomplete activation fail, and all Sequences states visibly show **Automation not configured**. A normal member should remain read-only.
+There are **no new environment variables** for Phase 6. Apply the migrations with the same privileged database role used for earlier migrations, deploy the web application, then verify a manager can save valid schedule, timing, and direct-variant configuration, invalid overlapping windows and incomplete activation fail, and all Sequences states visibly show **Automation not configured**. A normal member should remain read-only. Future email capacity is deliberately owned by configured campaign mailboxes and their health, pause, and daily-capacity policies—not by a sequence-wide throttle.
+
+`20260909000100_phase_6_sequence_direct_variants.sql` is intentionally a forward data migration for deployments that already have Phase 6 ordered steps. It preserves every saved variant, schedule, lifecycle state, and dormant enrollment record. If two former steps used the same key, the earliest retains that key and later records are deterministically renamed to `migrated-N`; no template content is deleted. The old step positions and delay values are deliberately removed because a sequence is now the only configuration unit.
+
+`20260909000200_phase_6_remove_sequence_throttle.sql` preserves every schedule timezone/window and jitter value while removing `campaign_sequence_schedules.throttle_max_sends_per_hour`. It does not enable any send path. A later scheduler must calculate eligibility from the configured campaign mailbox pool and enforce each mailbox's configured policy, health, pause, local-day capacity, and provider constraints.
+
+`20260909000300_phase_6_final_sequence_configuration.sql` replaces the earlier Phase 6 browser-era command arities with the final fresh-install surface. It creates `Step N` drafts under a campaign lock, blocks new steps while the campaign is active, safely removes only draft/paused steps without enrollment history, and compacts remaining generated labels. **Launch campaign**, **Pause campaign**, and **Resume campaign** apply atomically to every non-archived step; launch/resume validate every step before changing any status. Direct-variant labels are canonical lowercase keys (`a`, `b`, …, `z`, `aa`, …) rendered as uppercase in the UI; new variants append the next label and deletion compacts survivors in creation order. The final RPC accepts only subject/body fields—no browser-supplied name, throttle, or variant key—and there is no temporary history-deletion command.
+
+`20260909000400_phase_6_variant_rpc_signature_repair.sql` is intentionally narrower than a full upgrade migration. Apply it to an existing deployment only when it already has the former six-argument database-labeled `campaign_sequence_save_variant` command and the current application reports that variants cannot be saved. It exposes the final five-argument RPC by delegating to the established function with a null legacy key, preserving database-owned labels and all existing authorization checks. It does not make a database with any older Phase 6 schema compatible with the consolidated fresh-install migration.
 
 ## Prerequisites and environment
 
@@ -123,8 +136,8 @@ where schemaname = 'public'
     'lead_social_profiles', 'lead_assignments', 'lead_followers', 'audit_events',
     'campaigns', 'mailboxes', 'mailbox_sending_policies', 'mailbox_daily_usage',
     'mailbox_capacity_reservations', 'mailbox_health_observations',
-    'campaign_sequences', 'campaign_sequence_schedules', 'campaign_sequence_steps',
-    'campaign_sequence_step_variants', 'sequence_enrollments'
+    'campaign_sequences', 'campaign_sequence_schedules', 'campaign_sequence_variants',
+    'sequence_enrollments'
   )
 order by tablename;
 ```

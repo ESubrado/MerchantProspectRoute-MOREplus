@@ -37,7 +37,7 @@ The database is the system of record. The provider adapter and object store are 
 | Companies | `/companies`, company drawer/deep link | Search/list companies; edit core company fields; show linked contacts. |
 | Imports | Contact-page dialog/status | Create job, issue scoped upload authorization, enqueue work, expose read-only job progress. |
 | Mailboxes | `/mailboxes`, mailbox detail/settings | List state/health; enable/disable; configure policy for the current campaign's shared mailbox pool. Provisioning is a separate capability, initially out of UI scope. |
-| Sequences | `/sequences` | Manage the current campaign's many sequences, ordered steps, template variants and schedules; display campaign-scoped derived metrics. |
+| Sequences | `/sequences` | Manage the current campaign's many sequences, direct template variants, schedules, and configuration status; display configuration-only facts. |
 | Lead execution | Lead detail/inbox panel | Start, stop, resume, and manually reassign a route; return route/state/history. Workers own automatic state transitions. |
 | Inbox | `/`, `/c/[conversationId]`, `/lead/[leadId]` | List conversations, retrieve/mark messages read, issue attachment downloads, submit reply/forward commands. |
 
@@ -61,7 +61,7 @@ Campaign 1---* Mailbox 1---0..1 SendPolicy
 Mailbox 1---* DailySendUsage
 Campaign 1---* LeadMailboxRoute 1---* RouteEvent
 
-Campaign 1---* Sequence 1---* SequenceStep 1---* StepVariant
+Campaign 1---* Sequence 1---* SequenceVariant
 Lead 1---* SequenceEnrollment *---1 Campaign
 SequenceEnrollment 1---* SendAttempt
 SendAttempt *---1 Mailbox
@@ -115,7 +115,7 @@ Commands make one business change and publish/enqueue work transactionally where
 ### Sequence scheduler and dispatcher
 
 1. Find active enrollments whose next step is eligible in the step/sequence timezone.
-2. Enforce lead DNC, bounce/reply terminal rules, campaign mailbox active/health status, policy pause, daily cap, schedule window, throttle and jitter.
+2. Enforce lead DNC, bounce/reply terminal rules, campaign mailbox active/health status, policy pause, local-day capacity, sequence schedule window, jitter, and provider limits. Configured campaign mailboxes—not a sequence-wide throttle—determine delivery capacity.
 3. Select from the campaign's shared mailbox pool (persist a route once) and an active variant; create a uniquely keyed send attempt before any provider call.
 4. A dispatcher claims the attempt with a lease, sends through the project-owned provider adapter, and commits submitted/sent/failed/bounced/cancelled state idempotently.
 5. Update enrollment state and next eligibility in the same command boundary. Derived stats are materialized or queried from indexed facts, not handwritten in the UI.

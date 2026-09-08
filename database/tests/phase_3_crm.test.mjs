@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const migration = await readFile(new URL("../migrations/20260903000300_phase_3_crm.sql", import.meta.url), "utf8");
+const contactDetailRepair = await readFile(new URL("../migrations/20260908000100_repair_contact_detail_methods.sql", import.meta.url), "utf8");
 const foundationSchema = await readFile(new URL("../migrations/20260903000100_phase_1_workspace_crm.sql", import.meta.url), "utf8");
 const companiesData = await readFile(new URL("../../lib/crm/companies.ts", import.meta.url), "utf8");
 const companiesActions = await readFile(new URL("../../app/actions/companies.ts", import.meta.url), "utf8");
@@ -46,6 +47,31 @@ test("Phase 3 contact commands preserve method, ownership, follower, and complia
   assert.match(migration, /'contact\.email_dnc_changed'/i);
   assert.match(migration, /'contact\.reply_temperature_changed'/i);
   assert.match(migration, /crm_update_contact_profile/i);
+});
+
+test("Contact-method repair restores the read projection and every write command", () => {
+  const e164Pattern = "^\\+[1-9][0-9]{1,14}$";
+
+  assert.ok(foundationSchema.includes("e164_phone_number ~ '" + e164Pattern + "'"));
+  assert.match(contactDetailRepair, /drop function if exists public\.crm_get_contact_detail\(uuid, uuid\)/i);
+  assert.match(contactDetailRepair, /create function public\.crm_get_contact_detail/i);
+  assert.match(contactDetailRepair, /email_methods jsonb/i);
+  assert.match(contactDetailRepair, /phone_methods jsonb/i);
+  assert.match(contactDetailRepair, /social_profiles jsonb/i);
+  assert.match(contactDetailRepair, /phone_method\.e164_phone_number/i);
+  assert.ok(contactDetailRepair.includes("e164_phone_number ~ '" + e164Pattern + "'"));
+  assert.ok(contactDetailRepair.includes("normalized_phone_number !~ '" + e164Pattern + "'"));
+  assert.match(contactDetailRepair, /grant execute on function public\.crm_get_contact_detail\(uuid, uuid\) to authenticated/i);
+  for (const command of [
+    "crm_add_contact_email",
+    "crm_remove_contact_email",
+    "crm_add_contact_phone",
+    "crm_remove_contact_phone",
+    "crm_add_contact_social_profile",
+    "crm_remove_contact_social_profile",
+  ]) {
+    assert.match(contactDetailRepair, new RegExp(`create function public\\.${command}`, "i"));
+  }
 });
 
 test("Phase 3 data layers reauthorize workspace access and the Companies route has no illustrative rows", () => {
