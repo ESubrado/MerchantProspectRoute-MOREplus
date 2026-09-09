@@ -1,11 +1,13 @@
 # Implementation plan
 
-## Delivered foundation through Phase 6
+## Delivered foundation through Phase 6 and Phase 7A scaffolding
 
 1. Phase 1 established the standalone workspace, membership, CRM, audit, RLS, and owner/admin command boundary.
 2. Phases 2–4 added contact lifecycle commands, company/contact relationships, and disabled-by-default durable imports.
 3. Phase 5 added externally provisioned mailbox records, audited policy controls, health observations, dormant atomic capacity reservation primitives, and the one-workspace/one-campaign boundary. That campaign owns its mailboxes, send policies, sequences, schedules, variants, and enrollments.
 4. Phase 6 replaces the Sequences prototype with campaign-owned draft configuration: IANA timezones, non-overlapping weekly time windows, future jitter, and provider-neutral subject/body variants directly owned by each database-numbered `Step N` record. Variant labels are database-owned `A`, `B`, … values that append and compact deterministically. Configured campaign mailboxes, not a sequence-wide throttle, will own future delivery capacity. Managers can activate only a transactionally complete configuration, pause it for editing, or archive it.
+
+5. Phase 7A adds a server-only, fail-closed outbound adapter contract, a no-side-effect worker placeholder, a safe status route, and a webhook route that rejects every request. It creates no migration, queue connection, provider integration, storage access, enrollment command, or send path. Credentials alone cannot enable it.
 
 ## Phase 5 campaign invariant
 
@@ -21,6 +23,12 @@
 An **active** sequence means its configuration passes validation; it does not mean that work can run. Automation is not configured: there is no enrollment state machine, route selection, provider adapter, scheduler, queue, worker, webhook, or send attempt in this phase. The legacy authenticated enrollment RPC is revoked so a configuration state cannot be mistaken for a runnable lead state.
 
 The next outreach phase may add an explicit enrollment state machine, durable routing and then scheduling/dispatch. It must preserve the Phase 5 scope checks, choose only from the resolved campaign mailbox pool, store campaign traceability on routes, attempts, conversations, and metrics directly or through protected parents, and define idempotency, provider, retry, cancellation, DNC/reply/bounce, per-mailbox capacity, jitter, and auditing behavior before any sends are enabled.
+
+## Phase 7A disabled outbound scaffolding
+
+Phase 7A makes the future integration boundary explicit while keeping delivery impossible. The literal safety gate in `lib/outbound/phase-7a.ts` is deliberately not an environment variable, the only provider adapter throws before external work, the worker placeholder claims no jobs, and the webhook route returns `503` before reading untrusted input. No provider, queue, object storage, migration, or worker host is configured by this release.
+
+See [`phase-7a-outbound-scaffolding.md`](./phase-7a-outbound-scaffolding.md) for the exact completion checklist. Do not register the webhook URL with a provider or deploy an outbound worker until every listed requirement and integration test is complete.
 
 ## Deployment checklist for Phase 6
 
