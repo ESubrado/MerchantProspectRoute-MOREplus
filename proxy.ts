@@ -18,9 +18,10 @@ export async function proxy(request: NextRequest) {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet, headers) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.next({ request });
+        Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
         cookiesToSet.forEach(({ name, options, value }) => response.cookies.set(name, value, options));
       },
     },
@@ -32,7 +33,18 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user && request.nextUrl.pathname !== "/login") {
-    return NextResponse.redirect(loginUrl);
+    // getUser() may have just removed an expired or revoked session. Preserve
+    // those Set-Cookie updates on the redirect, or the browser will keep
+    // sending the same invalid refresh token on the next request.
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+
+    for (const name of ["Cache-Control", "Expires", "Pragma"]) {
+      const value = response.headers.get(name);
+      if (value) redirectResponse.headers.set(name, value);
+    }
+
+    return redirectResponse;
   }
 
   // The login page redirects verified signed-in users to the workspace.
