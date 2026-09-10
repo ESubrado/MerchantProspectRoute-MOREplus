@@ -6,3 +6,5 @@ await import("./phase_4_imports.test.mjs");
 await import("./phase_5_mailboxes.test.mjs");
 await import("./phase_5_campaign_boundary.test.mjs");
 await import("./phase_6_sequence_configuration.test.mjs");
+await import("./phase_7a_outbound_scaffolding.test.mjs");
+await import("./phase_7a_outbound_cron_ingress.test.mjs");
