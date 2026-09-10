@@ -13,12 +13,14 @@ Adding credentials to a deployment cannot activate delivery. A later reviewed Ph
 - `lib/outbound/worker.ts` is a side-effect-free worker entry-point placeholder. It reports zero claimed jobs.
 - `GET /api/outbound/status` reports that Phase 7A is disabled. It is not a deployment-health endpoint and exposes no configuration values.
 - `POST /api/outbound/webhook` responds with `503` before reading the request body. It must not be registered with an email provider yet.
+- `supabase/functions/outbound-dispatch/index.ts` is a source-only Cron ingress. It verifies a scheduler header when a Function secret exists, then returns `503` before reading a body or accessing work. It is not deployed or scheduled in this release.
+- `supabase/cron/outbound-dispatch.sql.example` records the future Vault-backed Cron command without enabling it. It must not be run while the disabled receiver remains in place.
 
 ## What is intentionally absent
 
 - No Phase 7 database migration, route, enrollment, send-attempt, event, outbox, queue, dead-letter, or webhook-event records.
 - No provider SDK, provider account, provider credentials, fetch call, webhook parser, or provider-specific code.
-- No worker process script, queue connection, scheduler, storage access, or deployment task.
+- No worker process script, queue connection, enabled Cron job, storage access, or deployment task.
 - No browser action, Route Handler, page render, or server action that can submit a send.
 
 ## Completion checklist before enabling delivery
@@ -35,4 +37,4 @@ Adding credentials to a deployment cannot activate delivery. A later reviewed Ph
 
 ## Environment guidance
 
-The sample environment file names future server/worker values but they are not read by Phase 7A. Do not add an `OUTBOUND_DELIVERY_ENABLED` flag: the scaffold intentionally has no configuration-only activation path. Keep `SUPABASE_SERVICE_ROLE_KEY`, provider keys, webhook secrets, queue URLs, and object-store keys out of browser code and out of version control.
+The sample environment file names future server/worker values but they are not read by Phase 7A. `OUTBOUND_CRON_SCHEDULER_SECRET` is a future Supabase Function/Vault secret only; it does not belong in the Next.js runtime or `.env.example`. Do not add an `OUTBOUND_DELIVERY_ENABLED` flag: the scaffold intentionally has no configuration-only activation path. Keep `SUPABASE_SERVICE_ROLE_KEY`, provider keys, webhook secrets, queue URLs, and object-store keys out of browser code and out of version control.

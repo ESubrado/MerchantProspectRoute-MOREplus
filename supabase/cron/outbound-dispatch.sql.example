@@ -1,0 +1,66 @@
+-- Phase 7 outbound-dispatch Cron command template.
+--
+-- DO NOT EXECUTE during Phase 7A. The current function is deliberately
+-- disabled and returns 503. This is an operator-run template, not a database
+-- migration: it depends on Vault secrets and a reviewed, deployed dispatcher.
+--
+-- Preconditions before executing:
+--   1. The reviewed Phase 7 migration has enabled pgmq, pg_cron, and pg_net.
+--   2. The real outbound-dispatch Function is deployed and its complete
+--      provider/queue/integration suite is passing.
+--   3. Supabase Vault contains these named secrets:
+--        outbound_cron_dispatch_url
+--          https://<project-ref>.supabase.co/functions/v1/outbound-dispatch
+--        outbound_cron_scheduler_secret
+--          The same high-entropy value as the Edge Function's
+--          OUTBOUND_CRON_SCHEDULER_SECRET secret.
+--
+-- The first statement replaces only this project-owned job if it already
+-- exists. It does not alter unrelated Cron jobs.
+select cron.unschedule(jobid)
+from cron.job
+where jobname = 'outbound-dispatch';
+
+-- Start with one tick per minute. The job's only job is to ask the bounded
+-- dispatcher to run; it must never contain sending logic or provider keys.
+select cron.schedule(
+  'outbound-dispatch',
+  '* * * * *',
+  $cron$
+    select net.http_post(
+      url := (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'outbound_cron_dispatch_url'
+      ),
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'x-outbound-cron-secret', (
+          select decrypted_secret
+          from vault.decrypted_secrets
+          where name = 'outbound_cron_scheduler_secret'
+        )
+      ),
+      body := jsonb_build_object('triggered_at', clock_timestamp()::text),
+      timeout_milliseconds := 5000
+    ) as request_id;
+  $cron$
+);
+
+-- Verify that the expected job exists and inspect only its recent history.
+select jobid, jobname, schedule, active
+from cron.job
+where jobname = 'outbound-dispatch';
+
+select *
+from cron.job_run_details
+where jobid = (
+  select jobid
+  from cron.job
+  where jobname = 'outbound-dispatch'
+)
+order by start_time desc
+limit 20;
+
+-- To remove only this project-owned job:
+-- select cron.unschedule(jobid) from cron.job where jobname = 'outbound-dispatch';

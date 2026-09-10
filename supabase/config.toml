@@ -1,0 +1,5 @@
+# Cron invokes this internal endpoint with a Vault-backed shared secret. The
+# Edge gateway must not require a user JWT, because no browser or user session
+# participates in a scheduler invocation.
+[functions.outbound-dispatch]
+verify_jwt = false

@@ -26,9 +26,9 @@ The next outreach phase may add an explicit enrollment state machine, durable ro
 
 ## Phase 7A disabled outbound scaffolding
 
-Phase 7A makes the future integration boundary explicit while keeping delivery impossible. The literal safety gate in `lib/outbound/phase-7a.ts` is deliberately not an environment variable, the only provider adapter throws before external work, the worker placeholder claims no jobs, and the webhook route returns `503` before reading untrusted input. No provider, queue, object storage, migration, or worker host is configured by this release.
+Phase 7A makes the future integration boundary explicit while keeping delivery impossible. The literal safety gate in `lib/outbound/phase-7a.ts` is deliberately not an environment variable, the only provider adapter throws before external work, the worker placeholder claims no jobs, and the webhook route returns `503` before reading untrusted input. A source-only Supabase Cron ingress verifies an optional scheduler header then returns `503`; it has no queue, database, storage, provider, or request-body access and is neither deployed nor scheduled. No provider, queue, object storage, migration, or active worker host is configured by this release.
 
-See [`phase-7a-outbound-scaffolding.md`](./phase-7a-outbound-scaffolding.md) for the exact completion checklist. Do not register the webhook URL with a provider or deploy an outbound worker until every listed requirement and integration test is complete.
+See [`phase-7a-outbound-scaffolding.md`](./phase-7a-outbound-scaffolding.md) and the [Supabase Cron runbook](./supabase-cron-runbook.md) for the exact completion checklist. Do not register the webhook URL with a provider or deploy an outbound worker until every listed requirement and integration test is complete.
 
 ## Deployment checklist for Phase 6
 

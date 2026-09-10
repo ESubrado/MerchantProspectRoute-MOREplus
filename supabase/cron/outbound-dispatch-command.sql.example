@@ -1,0 +1,23 @@
+-- Dashboard Cron Job -> SQL snippet command for Phase 7 outbound dispatch.
+--
+-- DO NOT EXECUTE during Phase 7A. Use this file only after the preconditions
+-- in outbound-dispatch.sql.example have been met. In the Dashboard Cron form,
+-- paste this command as the job body; enter the job name and schedule in the
+-- form instead of nesting it in cron.schedule().
+select net.http_post(
+  url := (
+    select decrypted_secret
+    from vault.decrypted_secrets
+    where name = 'outbound_cron_dispatch_url'
+  ),
+  headers := jsonb_build_object(
+    'Content-Type', 'application/json',
+    'x-outbound-cron-secret', (
+      select decrypted_secret
+      from vault.decrypted_secrets
+      where name = 'outbound_cron_scheduler_secret'
+    )
+  ),
+  body := jsonb_build_object('triggered_at', clock_timestamp()::text),
+  timeout_milliseconds := 5000
+) as request_id;
